@@ -1,1164 +1,1562 @@
 """
 ╔══════════════════════════════════════════════════════════════════╗
-║        🦀  EVERYTHING IS CRAB  — Versão Melhorada  🦀           ║
-║        Roguelite de Evolução Animal                              ║
+║     🦀  EVERYTHING IS CRAB  — SIMPLIFIED EDITION  🦀            ║
+║     Roguelite Twin-Stick Shooter com Parry e Efeitos Visuais    ║
 ╚══════════════════════════════════════════════════════════════════╝
-
-COMO JOGAR:
-  - Você começa como um blobinho azul frágil num ecossistema hostil
-  - WASD / Setas  → mover
-  - Coma FRUTAS 🍎 e COGUMELOS 🍄 para ganhar XP
-  - Mate animais MENORES para carne e XP bônus
-  - FUJA de animais maiores!
-  - A cada nível escolha 1 de 3 EVOLUÇÕES
-  - A cada 60s aparece um BOSS — derrote-o para ganhar evolução rara!
-  - Sobreviva 3 minutos para vencer 🏆
-
-DEPENDÊNCIA:
-  py -3.12 -m pip install pygame
-  py -3.12 everything_is_crab.py
 """
 
 import pygame
 import random
 import math
 import sys
+from enum import Enum
 
-# ══════════════════════════════════════════════
-#  CONFIGURAÇÕES
-# ══════════════════════════════════════════════
-LARGURA      = 1024
-ALTURA       = 680
-FPS          = 60
-DURACAO_RUN  = 180   # segundos
+# ═══════════════════════════════════════════════════════════════════
+# CONFIGURAÇÕES
+# ═══════════════════════════════════════════════════════════════════
+LARGURA = 1280
+ALTURA = 720
+FPS = 60
+DURACAO_RUN = 600
 
-# ══════════════════════════════════════════════
-#  PALETA
-# ══════════════════════════════════════════════
-C_FUNDO      = (28, 42, 22)
-C_GRAMA_A    = (38, 58, 28)
-C_GRAMA_B    = (48, 70, 32)
-C_TERRA      = (80, 60, 40)
-C_PLAYER     = (70, 130, 220)
-C_FRUTA      = (60, 210, 60)
-C_COGUMELO   = (170, 70, 210)
-C_CARNE      = (210, 70, 50)
-C_TEXTO      = (240, 235, 210)
-C_HUD_BG     = (15, 15, 20)
-C_XP         = (80, 210, 110)
-C_VIDA       = (210, 55, 55)
-C_AVISO      = (255, 70, 30)
-C_BOSS_HUD   = (200, 30, 30)
-C_OURO       = (255, 210, 40)
+# Cores (todas com valores 0-255)
+class Colors:
+    BG = (15, 20, 25)
+    BG_DARK = (10, 12, 18)
+    PLAYER = (70, 150, 230)
+    PLAYER_CRAB = (210, 70, 40)
+    ENEMY = (200, 50, 50)
+    ENEMY_BOSS = (100, 30, 150)
+    BULLET = (255, 220, 80)
+    MEAT = (180, 50, 40)
+    XP = (100, 255, 100)
+    HP = (255, 80, 80)
+    GOLD = (255, 215, 0)
+    DASH_TRAIL = (100, 200, 255)
+    TEXT = (240, 240, 240)
+    PARRY = (80, 200, 255)
+    CHAIN_LIGHTNING = (100, 200, 255)
+    WHITE = (255, 255, 255)
+    BLACK = (0, 0, 0)
+    SHADOW = (0, 0, 0, 80)
 
-CORES_ANIMAIS = [
-    (220,155,50),(150,215,75),(195,70,95),
-    (90,175,225),(235,175,35),(145,90,200),(195,200,70),
-    (255,120,40),(40,190,160),(230,80,150),
+
+# ═══════════════════════════════════════════════════════════════════
+# UPGRADES
+# ═══════════════════════════════════════════════════════════════════
+
+LEVEL_UPGRADES = [
+    {"nome": "🔫 Dano +", "desc": "+20% de dano", "dano": 1.2, "icone": "⚔️", "rar": 1},
+    {"nome": "🔫 Dano ++", "desc": "+40% de dano", "dano": 1.4, "icone": "⚔️", "rar": 2},
+    {"nome": "🔫 Dano +++", "desc": "+60% de dano", "dano": 1.6, "icone": "⚔️", "rar": 3},
+    {"nome": "📈 Cadência +", "desc": "Taxa de tiro +30%", "fire_rate": 0.7, "icone": "⚡", "rar": 2},
+    {"nome": "📈 Cadência ++", "desc": "Taxa de tiro +60%", "fire_rate": 0.5, "icone": "⚡", "rar": 3},
+    {"nome": "🎯 Precisão", "desc": "Projéteis +30% mais rápido", "bullet_speed": 1.3, "icone": "🎯", "rar": 2},
+    {"nome": "💥 Impacto", "desc": "Projéteis +50% maiores", "bullet_size": 1.5, "icone": "💥", "rar": 2},
+    {"nome": "🦵 Velocidade +", "desc": "+25% velocidade", "speed": 1.25, "icone": "🏃", "rar": 1},
+    {"nome": "🦵 Velocidade ++", "desc": "+50% velocidade", "speed": 1.5, "icone": "🏃", "rar": 2},
+    {"nome": "💨 Dash +", "desc": "Dash -30% de cooldown", "dash_cooldown": 0.7, "icone": "💨", "rar": 2},
+    {"nome": "❤️ Vida +", "desc": "+25 de vida máxima", "max_hp": 25, "icone": "❤️", "rar": 1},
+    {"nome": "🛡️ Defesa +", "desc": "-15% dano recebido", "defense": 0.85, "icone": "🛡️", "rar": 2},
+    {"nome": "💚 Regeneração", "desc": "+3 vida/segundo", "regen": 3, "icone": "💚", "rar": 2},
+    {"nome": "💰 Ganância", "desc": "+30% XP e moedas", "xp_bonus": 1.3, "coin_bonus": 1.3, "icone": "💰", "rar": 2},
+    {"nome": "💢 Raiva", "desc": "+30% dano por 10s ao tomar dano", "rage": True, "icone": "💢", "rar": 3},
+    {"nome": "❄️ Congelante", "desc": "Tiros reduzem velocidade inimiga", "freeze": True, "icone": "❄️", "rar": 3},
+    {"nome": "⚡ Elétrico", "desc": "Dano em cadeia (com efeito visual de raio)", "chain": True, "icone": "⚡", "rar": 3},
 ]
 
-# ══════════════════════════════════════════════
-#  POOL DE EVOLUÇÕES  (45 no total)
-# ══════════════════════════════════════════════
-# Cada entrada: nome, desc, icone, raridade (1=comum,2=rara,3=épica), efeitos
-EVOLUCOES = [
-    # ── MOVIMENTO ────────────────────────────────────────────────────
-    {"nome":"Patas Ágeis",       "icone":"🦵","rar":1,"desc":"+35% velocidade",        "vel":1.35},
-    {"nome":"Nadadeiras",        "icone":"🐟","rar":1,"desc":"+25% velocidade",        "vel":1.25},
-    {"nome":"Asas de Morcego",   "icone":"🦇","rar":2,"desc":"+65% velocidade",        "vel":1.65},
-    {"nome":"Propulsão",         "icone":"🚀","rar":3,"desc":"+100% velocidade",       "vel":2.0},
-    {"nome":"Pernas de Saltador","icone":"🦘","rar":2,"desc":"+50% vel + dash",        "vel":1.5,"dash":True},
-
-    # ── COMBATE ───────────────────────────────────────────────────────
-    {"nome":"Garras Afiadas",    "icone":"⚔️","rar":1,"desc":"+50% dano",             "dano":1.5},
-    {"nome":"Ferrão Venenoso",   "icone":"☠️","rar":2,"desc":"+80% dano + veneno",    "dano":1.8,"veneno":True},
-    {"nome":"Pinças de Caranguejo","icone":"🦀","rar":2,"desc":"+60% dano +20 vida",  "dano":1.6,"vida":20},
-    {"nome":"Mandíbulas",        "icone":"🦈","rar":1,"desc":"+40% dano",             "dano":1.4},
-    {"nome":"Chifres",           "icone":"🦏","rar":1,"desc":"+45% dano",             "dano":1.45},
-    {"nome":"Bico de Abutre",    "icone":"🦅","rar":2,"desc":"+70% dano",             "dano":1.7},
-    {"nome":"Presas de Sabre",   "icone":"🐯","rar":3,"desc":"+120% dano",            "dano":2.2},
-    {"nome":"Esporão de Osso",   "icone":"🦴","rar":2,"desc":"+55% dano",             "dano":1.55},
-
-    # ── DEFESA / VIDA ─────────────────────────────────────────────────
-    {"nome":"Concha Dura",       "icone":"🐚","rar":1,"desc":"+80 vida máx",          "vida":80},
-    {"nome":"Pele Grossa",       "icone":"🦛","rar":1,"desc":"-30% dano recebido",    "def":0.70},
-    {"nome":"Armadura de Osso",  "icone":"💀","rar":2,"desc":"-50% dano recebido",    "def":0.50},
-    {"nome":"Escamas de Dragão", "icone":"🐉","rar":3,"desc":"-65% dano recebido",    "def":0.35},
-    {"nome":"Espinhos",          "icone":"🌵","rar":2,"desc":"Reflete 25% do dano",   "espinhos":True},
-    {"nome":"Corpo Maior",       "icone":"📏","rar":2,"desc":"+35% tamanho +60 vida", "tamanho":1.35,"vida":60},
-    {"nome":"Blob Gordo",        "icone":"🫧","rar":1,"desc":"+50 vida máx",          "vida":50},
-    {"nome":"Carapaça",          "icone":"🦞","rar":2,"desc":"+100 vida +def leve",   "vida":100,"def":0.85},
-
-    # ── REGENERAÇÃO / SUPORTE ─────────────────────────────────────────
-    {"nome":"Regeneração",       "icone":"💚","rar":2,"desc":"Regen +3 vida/s",       "regen":3},
-    {"nome":"Regen Épica",       "icone":"💗","rar":3,"desc":"Regen +8 vida/s",       "regen":8},
-    {"nome":"Boca Gulosa",       "icone":"👄","rar":1,"desc":"+40% XP de comida",     "xp_bonus":1.4},
-    {"nome":"Língua Longa",      "icone":"🦎","rar":1,"desc":"Raio de coleta x1.6",   "raio_coleta":1.6},
-    {"nome":"Tromba Sugadora",   "icone":"🐘","rar":2,"desc":"Raio de coleta x2.2",   "raio_coleta":2.2},
-    {"nome":"Bico Grande",       "icone":"🦜","rar":1,"desc":"+50% XP de comida",     "xp_bonus":1.5},
-
-    # ── ESPECIAIS ─────────────────────────────────────────────────────
-    {"nome":"Camuflagem",        "icone":"🌿","rar":2,"desc":"Inimigos te veem menos","camuflagem":True},
-    {"nome":"Aura de Fogo",      "icone":"🔥","rar":3,"desc":"Queima inimigos perto", "aura_fogo":True},
-    {"nome":"Veneno em Área",    "icone":"🧪","rar":3,"desc":"Nuvem de veneno ao redor","aura_veneno":True},
-    {"nome":"Olho de Aguia",     "icone":"👁️","rar":2,"desc":"Vê inimigos mais longe","percep":1.7},
-    {"nome":"Carcinização",      "icone":"🦀","rar":3,"desc":"VIRA CARANGUEJO: tudo+","dano":1.3,"vel":1.15,"vida":40,"def":0.88},
-    {"nome":"Membrana Solar",    "icone":"☀️","rar":3,"desc":"Regen +5/s + +20% vel", "regen":5,"vel":1.2},
-    {"nome":"Células Regenerativas","icone":"🔬","rar":3,"desc":"Cura 30% vida ao subir nível","cura_nivel":True},
-    {"nome":"Instinto Predador", "icone":"🐺","rar":3,"desc":"+80% dano +30% vel",    "dano":1.8,"vel":1.3},
+BOSS_UPGRADES = [
+    {"nome": "🩸 Vampirismo", "desc": "30% do dano vira vida", "efeito": "vampirismo"},
+    {"nome": "⚡ Raio Duplo", "desc": "Dispara 2 projéteis", "efeito": "double_shot"},
+    {"nome": "💥 Explosão", "desc": "Projéteis explodem", "efeito": "explosive"},
+    {"nome": "🌀 Ricochete", "desc": "Projéteis ricocheteiam", "efeito": "ricochet"},
+    {"nome": "⚙️ Metralhadora", "desc": "Taxa de tiro +100%", "efeito": "fast_shoot"},
+    {"nome": "🔫 Penetração", "desc": "Atravessa inimigos", "efeito": "pierce"},
+    {"nome": "🛡️ Escudo", "desc": "Escudo que absorve dano", "efeito": "shield"},
+    {"nome": "🐚 Carcinização", "desc": "Vira caranguejo lendário", "efeito": "crab"},
 ]
 
-# Evoluções épicas exclusivas de boss (não aparecem no pool normal)
-EVOLUCOES_BOSS = [
-    {"nome":"Coroa do Rei",      "icone":"👑","rar":3,"desc":"Todos stats +25%",      "dano":1.25,"vel":1.25,"vida":60,"def":0.80},
-    {"nome":"Coração de Boss",   "icone":"💢","rar":3,"desc":"+200 vida + regen 10/s","vida":200,"regen":10},
-    {"nome":"Fúria Primordial",  "icone":"⚡","rar":3,"desc":"+150% dano",            "dano":2.5},
-    {"nome":"Escudo Divino",     "icone":"🛡️","rar":3,"desc":"-80% dano recebido",   "def":0.20},
-    {"nome":"Omega Caranguejo",  "icone":"🦀","rar":3,"desc":"A FORMA FINAL",         "dano":2.0,"vel":1.4,"vida":150,"def":0.60},
-]
 
-# ══════════════════════════════════════════════
-#  UTILITÁRIOS
-# ══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════
+# EFEITO DE RAIO (Chain Lightning)
+# ═══════════════════════════════════════════════════════════════════
 
-def dist(ax,ay,bx,by): return math.hypot(bx-ax,by-ay)
-
-def ipcor(ca,cb,t):
-    return tuple(max(0,min(255,int(ca[i]+(cb[i]-ca[i])*t))) for i in range(3))
-
-def draw_shadow(surf,text,font,cor,x,y,sh=(0,0,0),offx=2,offy=2):
-    surf.blit(font.render(text,True,sh),(x+offx,y+offy))
-    surf.blit(font.render(text,True,cor),(x,y))
-
-def draw_bar(surf,x,y,w,h,val,maximo,cor,bg=(40,40,40),radius=5):
-    pygame.draw.rect(surf,bg,(x,y,w,h),border_radius=radius)
-    fill=max(0,int(w*val/max(1,maximo)))
-    if fill>0:
-        pygame.draw.rect(surf,cor,(x,y,fill,h),border_radius=radius)
-    pygame.draw.rect(surf,ipcor(cor,(255,255,255),0.3),(x,y,w,h),2,border_radius=radius)
-
-def escolher_evo_pool(qtd=3,apenas_raras=False):
-    pool=[e for e in EVOLUCOES if not apenas_raras or e["rar"]>=2]
-    pesos=[{1:10,2:3,3:1}[e["rar"]] for e in pool]
-    escolhidos=[]
-    pool_c=list(zip(pool,pesos))
-    for _ in range(min(qtd,len(pool_c))):
-        total=sum(p for _,p in pool_c)
-        r=random.uniform(0,total)
-        acc=0
-        for i,(e,p) in enumerate(pool_c):
-            acc+=p
-            if r<=acc:
-                escolhidos.append(e)
-                pool_c.pop(i)
-                break
-    return escolhidos
-
-
-# ══════════════════════════════════════════════
-#  PARTÍCULA
-# ══════════════════════════════════════════════
-
-class Particula:
-    def __init__(self,x,y,cor,vel=3,vida=40,grav=0.05,raio=None):
-        self.x,self.y=float(x),float(y)
-        self.cor=cor
-        a=random.uniform(0,2*math.pi)
-        v=random.uniform(vel*0.4,vel)
-        self.vx=math.cos(a)*v; self.vy=math.sin(a)*v
-        self.vida=vida; self.vida_max=vida
-        self.r=raio or random.randint(2,5)
-        self.grav=grav
+class LightningEffect:
+    def __init__(self, start_x, start_y, end_x, end_y):
+        self.start_x = start_x
+        self.start_y = start_y
+        self.end_x = end_x
+        self.end_y = end_y
+        self.life = 10
+        self.segments = []
+        
+        dx = end_x - start_x
+        dy = end_y - start_y
+        dist = math.hypot(dx, dy)
+        steps = int(dist / 10) + 3
+        
+        prev_x, prev_y = start_x, start_y
+        for i in range(steps):
+            t = i / steps
+            x = start_x + dx * t
+            y = start_y + dy * t
+            if 0 < t < 1:
+                x += random.uniform(-15, 15)
+                y += random.uniform(-15, 15)
+            self.segments.append((x, y))
+            
     def update(self):
-        self.x+=self.vx; self.y+=self.vy
-        self.vy+=self.grav; self.vida-=1
-    def draw(self,surf):
-        if self.vida<=0: return
-        a=int(255*self.vida/self.vida_max)
-        s=pygame.Surface((self.r*2,self.r*2),pygame.SRCALPHA)
-        pygame.draw.circle(s,(*self.cor,a),(self.r,self.r),self.r)
-        surf.blit(s,(int(self.x)-self.r,int(self.y)-self.r))
+        self.life -= 1
+        
+    def draw(self, surf):
+        if self.life <= 0:
+            return
+        alpha = int(255 * self.life / 10)
+        for i in range(len(self.segments) - 1):
+            # Desenha raio principal
+            pygame.draw.line(surf, (100, 200, 255, alpha), 
+                           (int(self.segments[i][0]), int(self.segments[i][1])),
+                           (int(self.segments[i+1][0]), int(self.segments[i+1][1])), 3)
+            # Efeito de brilho
+            pygame.draw.line(surf, (255, 255, 255, alpha//2),
+                           (int(self.segments[i][0]), int(self.segments[i][1])),
+                           (int(self.segments[i+1][0]), int(self.segments[i+1][1])), 1)
+                           
     @property
-    def morta(self): return self.vida<=0
+    def is_alive(self):
+        return self.life > 0
 
 
-# ══════════════════════════════════════════════
-#  COMIDA
-# ══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════
+# EFEITO DE PARRY
+# ═══════════════════════════════════════════════════════════════════
 
-class Comida:
-    def __init__(self,x,y,tipo="fruta"):
-        self.x=float(x); self.y=float(y)
-        self.tipo=tipo
-        self.raio=10
-        self.xp={"fruta":8,"cogumelo":16,"carne":28}[tipo]
-        self.fase=random.uniform(0,2*math.pi)
-    def draw(self,surf,tick):
-        bob=math.sin(tick*0.07+self.fase)*3
-        cx,cy=int(self.x),int(self.y+bob)
-        r=self.raio
-        if self.tipo=="fruta":
-            pygame.draw.circle(surf,C_FRUTA,(cx,cy),r)
-            pygame.draw.circle(surf,(30,160,30),(cx,cy),r,2)
-            pygame.draw.line(surf,(60,120,30),(cx,cy-r),(cx+3,cy-r-6),2)
-            pygame.draw.circle(surf,(180,255,150),(cx-3,cy-3),3)
-        elif self.tipo=="cogumelo":
-            pygame.draw.ellipse(surf,C_COGUMELO,(cx-r,cy-r,r*2,int(r*1.2)))
-            pygame.draw.rect(surf,(225,205,205),(cx-4,cy,8,r-2))
-            for dx2,dy2 in [(-4,-5),(3,-7),(0,-3)]:
-                pygame.draw.circle(surf,(255,255,255),(cx+dx2,cy+dy2),2)
-        else:
-            pygame.draw.circle(surf,C_CARNE,(cx,cy),r)
-            pygame.draw.circle(surf,(160,40,20),(cx,cy),r,2)
-            pygame.draw.line(surf,(240,220,200),(cx-5,cy-5),(cx+5,cy+5),2)
-            pygame.draw.line(surf,(240,220,200),(cx+5,cy-5),(cx-5,cy+5),2)
-
-
-# ══════════════════════════════════════════════
-#  ANIMAL  (NPC)
-# ══════════════════════════════════════════════
-
-class Animal:
-    """Criatura do ecossistema com IA simples de perseguir/fugir."""
-    def __init__(self,x,y,nivel=1):
-        self.x=float(x); self.y=float(y)
-        self.nivel=nivel
-        self.raio=10+nivel*6
-        self.vida=self.raio*5; self.vida_max=self.vida
-        self.vel=random.uniform(0.7,1.5)*(1+nivel*0.12)
-        self.cor=random.choice(CORES_ANIMAIS)
-        self.cor2=ipcor(self.cor,(255,255,255),0.35)
-        self.ang=random.uniform(0,2*math.pi)
-        self.timer_dir=random.randint(30,80)
-        self.vivo=True
-        self.fase=random.uniform(0,2*math.pi)
-        self.xp_drop=nivel*22
-        self.tick_local=random.randint(0,60)
-        # número de "patas" visual (1-3 pares)
-        self.num_patas=random.randint(1,3)
-        self.tem_cauda=random.random()<0.5
-        self.tem_chifre=random.random()<0.3
-
-    def update(self,jx,jy,jr,percepcao_bonus=1.0):
-        if not self.vivo: return
-        dx=jx-self.x; dy=jy-self.y; d=math.hypot(dx,dy)
-        perc=180*percepcao_bonus if self.nivel<3 else 220*percepcao_bonus
-        if d<perc:
-            if self.raio>jr*1.1:
-                self.ang=math.atan2(dy,dx)+random.uniform(-0.15,0.15)
-            else:
-                self.ang=math.atan2(-dy,-dx)+random.uniform(-0.25,0.25)
-        else:
-            self.timer_dir-=1
-            if self.timer_dir<=0:
-                self.ang=random.uniform(0,2*math.pi)
-                self.timer_dir=random.randint(40,100)
-        self.x+=math.cos(self.ang)*self.vel
-        self.y+=math.sin(self.ang)*self.vel
-        self.x=max(self.raio,min(LARGURA-self.raio,self.x))
-        self.y=max(self.raio+55,min(ALTURA-self.raio-55,self.y))
-        self.tick_local+=1
-
-    def hit(self,dano):
-        self.vida-=dano
-        if self.vida<=0: self.vivo=False
-
-    def draw(self,surf):
-        if not self.vivo: return
-        cx,cy=int(self.x),int(self.y); r=self.raio; t=self.tick_local
-
-        # Cauda
-        if self.tem_cauda:
-            ang_c=self.ang+math.pi+math.sin(t*0.1)*0.4
-            tx=cx+math.cos(ang_c)*(r+8)
-            ty=cy+math.sin(ang_c)*(r+8)
-            pygame.draw.line(surf,self.cor,(cx,cy),(int(tx),int(ty)),max(2,r//5))
-
-        # Patas animadas
-        for i in range(self.num_patas):
-            for lado in(-1,1):
-                ba=math.radians(lado*(40+i*30))
-                osc=math.sin(t*0.13+i*0.9)*12*lado
-                ar=self.ang+ba+math.radians(osc)
-                ox=cx+lado*int(r*0.55); oy=cy+(i-self.num_patas//2)*int(r*0.4)
-                fx=ox+math.cos(ar)*r*0.85; fy=oy+math.sin(ar)*r*0.85
-                pygame.draw.line(surf,self.cor2,(ox,oy),(int(fx),int(fy)),max(1,r//7))
-
-        # Corpo
-        pygame.draw.ellipse(surf,self.cor,(cx-r,cy-int(r*0.75),r*2,int(r*1.5)))
-        pygame.draw.ellipse(surf,self.cor2,(cx-int(r*0.55),cy-int(r*0.6),int(r*1.1),int(r*0.55)))
-
-        # Chifre
-        if self.tem_chifre:
-            pygame.draw.polygon(surf,ipcor(self.cor,(255,255,200),0.5),[
-                (cx,cy-r-2),(cx-4,cy-r-14),(cx+4,cy-r-14)])
-
-        # Olhos
-        for lado in(-1,1):
-            ex=cx+lado*int(r*0.33); ey=cy-int(r*0.22)
-            pygame.draw.circle(surf,(255,250,220),(ex,ey),max(2,r//4))
-            pygame.draw.circle(surf,(15,15,15),(ex+lado,ey+1),max(1,r//8))
-
-        # Barra de vida mini
-        if self.vida<self.vida_max:
-            draw_bar(surf,cx-r,cy-r-10,r*2,5,self.vida,self.vida_max,C_VIDA,(60,20,20),3)
-
-        # Pontinhos de nível
-        for i in range(self.nivel):
-            pygame.draw.circle(surf,(255,210,40),(cx-(self.nivel-1)*5+i*10,cy+r+7),3)
-
-
-# ══════════════════════════════════════════════
-#  BOSS
-# ══════════════════════════════════════════════
-
-class Boss:
-    """
-    Inimigo especial enorme com múltiplas fases.
-    Fase 1: persegue; Fase 2 (50% vida): fica mais rápido e dispara projéteis.
-    """
-    NOMES=[
-        ("Kraken Ancestral",(60,80,200)),
-        ("Urso-Goblin Rei",(140,80,30)),
-        ("Hidra Venenosa",(60,180,60)),
-        ("Leviatã do Abismo",(20,100,160)),
-        ("Golem de Ossos",(200,190,160)),
-    ]
-
-    def __init__(self,index=0):
-        nome_info=Boss.NOMES[index % len(Boss.NOMES)]
-        self.nome=nome_info[0]
-        self.cor=nome_info[1]
-        self.cor2=ipcor(self.cor,(255,255,255),0.35)
-
-        # Spawn nas bordas
-        lado=random.randint(0,3)
-        if lado==0: self.x,self.y=random.randint(100,LARGURA-100),80.0
-        elif lado==1: self.x,self.y=random.randint(100,LARGURA-100),float(ALTURA-80)
-        elif lado==2: self.x,self.y=80.0,random.randint(100,ALTURA-100)
-        else: self.x,self.y=float(LARGURA-80),random.randint(100,ALTURA-100)
-
-        self.raio=52
-        self.vida_max=600+index*120
-        self.vida=float(self.vida_max)
-        self.vel=0.9+index*0.1
-        self.dano_contato=30
-        self.ang=0.0
-        self.fase=1          # 1 ou 2
-        self.tick=0
-        self.vivo=True
-        self.projéteis:list[Projetil]=[]
-        self.timer_proj=0
-        self.invencivel=0
-        self.num_cabecas=random.randint(1,3)  # visual
-        self.tem_tentaculos=random.random()<0.5
-
-    def update(self,jx,jy):
-        if not self.vivo: return
-        self.tick+=1
-        if self.invencivel>0: self.invencivel-=1
-
-        # Transição de fase
-        if self.fase==1 and self.vida<self.vida_max*0.5:
-            self.fase=2
-            self.vel*=1.5
-            self.dano_contato=int(self.dano_contato*1.4)
-
-        # Movimento em direção ao jogador (com leve ziguezague)
-        dx=jx-self.x; dy=jy-self.y; d=math.hypot(dx,dy)
-        if d>1:
-            zigzag=math.sin(self.tick*0.06)*0.5
-            self.ang=math.atan2(dy,dx)+zigzag
-        self.x+=math.cos(self.ang)*self.vel
-        self.y+=math.sin(self.ang)*self.vel
-        self.x=max(self.raio,min(LARGURA-self.raio,self.x))
-        self.y=max(self.raio+55,min(ALTURA-self.raio-55,self.y))
-
-        # Fase 2: dispara projéteis a cada 90 frames
-        if self.fase==2:
-            self.timer_proj+=1
-            if self.timer_proj>=90:
-                self.timer_proj=0
-                # Dispara em leque de 5 projéteis
-                for k in range(5):
-                    ang_p=math.atan2(jy-self.y,jx-self.x)+math.radians(-40+k*20)
-                    self.projéteis.append(Projetil(self.x,self.y,ang_p,self.cor,7))
-
-        # Atualiza projéteis
-        for p in self.projéteis: p.update()
-        self.projéteis=[p for p in self.projéteis if not p.morto]
-
-    def hit(self,dano):
-        if self.invencivel>0: return
-        self.vida-=dano
-        self.invencivel=8
-        if self.vida<=0:
-            self.vida=0; self.vivo=False
-
-    def draw(self,surf):
-        if not self.vivo: return
-        cx,cy=int(self.x),int(self.y); r=self.raio; t=self.tick
-
-        # Aura pulsante
-        aura_r=r+20+int(math.sin(t*0.07)*8)
-        cor_aura=self.cor2 if self.fase==1 else (255,80,20)
-        s=pygame.Surface((aura_r*2,aura_r*2),pygame.SRCALPHA)
-        pygame.draw.circle(s,(*cor_aura,50),(aura_r,aura_r),aura_r)
-        surf.blit(s,(cx-aura_r,cy-aura_r))
-
-        # Tentáculos (se tiver)
-        if self.tem_tentaculos:
-            for i in range(6):
-                base_ang=i*(2*math.pi/6)+t*0.02
-                for seg in range(4):
-                    r1=(seg+1)*(r//4)
-                    r2=(seg+2)*(r//4)
-                    ondula=math.sin(t*0.08+i+seg*0.5)*20
-                    a1=base_ang+math.radians(ondula)
-                    a2=base_ang+math.radians(ondula+5)
-                    x1=cx+math.cos(a1)*r1; y1=cy+math.sin(a1)*r1
-                    x2=cx+math.cos(a2)*r2; y2=cy+math.sin(a2)*r2
-                    pygame.draw.line(surf,ipcor(self.cor,(0,0,0),0.3),
-                                     (int(x1),int(y1)),(int(x2),int(y2)),3)
-
-        # Corpo principal
-        cor_body=self.cor if self.fase==1 else ipcor(self.cor,(255,50,50),0.4)
-        pygame.draw.circle(surf,cor_body,(cx,cy),r)
-        pygame.draw.circle(surf,self.cor2,(cx,cy-r//4),int(r*0.65))
-
-        # Múltiplas cabeças
-        for i in range(self.num_cabecas):
-            if self.num_cabecas==1:
-                offsets=[(0,0)]
-            elif self.num_cabecas==2:
-                offsets=[(-r//2,-r//3),(r//2,-r//3)]
-            else:
-                offsets=[(0,-r//2),(-r//2,r//4),(r//2,r//4)]
-            ox,oy=offsets[i]
-            hcx=cx+ox; hcy=cy+oy
-            hr=max(10,r//3)
-            pygame.draw.circle(surf,cor_body,(hcx,hcy),hr)
-            # Olhos furiosos
-            for lado in(-1,1):
-                ex=hcx+lado*hr//3; ey=hcy-hr//4
-                pygame.draw.circle(surf,(255,50,50),(ex,ey),max(3,hr//3))
-                pygame.draw.circle(surf,(0,0,0),(ex,ey),max(1,hr//6))
-
-        # Espinhos ao redor (fase 2)
-        if self.fase==2:
-            for k in range(12):
-                ang_s=math.radians(k*30+t*2)
-                sx=cx+math.cos(ang_s)*r
-                sy=cy+math.sin(ang_s)*r
-                ex2=cx+math.cos(ang_s)*(r+14)
-                ey2=cy+math.sin(ang_s)*(r+14)
-                pygame.draw.line(surf,(255,120,20),(int(sx),int(sy)),(int(ex2),int(ey2)),3)
-
-        # Projéteis
-        for p in self.projéteis: p.draw(surf)
-
-        # Barra de vida do boss (grande, no topo da tela)
-        bx=LARGURA//2-200; by=ALTURA-45
-        draw_bar(surf,bx,by,400,22,self.vida,self.vida_max,C_BOSS_HUD,(40,10,10),6)
-        txt_b=_fonte_peq_global.render(f"👹 {self.nome}  ({'⚡FASE 2' if self.fase==2 else 'Fase 1'})",
-                                       True,(255,160,160))
-        surf.blit(txt_b,(LARGURA//2-txt_b.get_width()//2,by-18))
-
-    def draw_projéteis(self,surf):
-        for p in self.projéteis: p.draw(surf)
-
-
-# ══════════════════════════════════════════════
-#  PROJÉTIL (do Boss)
-# ══════════════════════════════════════════════
-
-class Projetil:
-    def __init__(self,x,y,ang,cor,vel=6):
-        self.x=float(x); self.y=float(y)
-        self.ang=ang; self.vel=vel; self.cor=cor
-        self.raio=8; self.vivo=True
-        self.tick=0
+class ParryEffect:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.life = 15
+        self.size = 30
+        
     def update(self):
-        self.x+=math.cos(self.ang)*self.vel
-        self.y+=math.sin(self.ang)*self.vel
-        self.tick+=1
-        if (self.x<0 or self.x>LARGURA or self.y<0 or self.y>ALTURA
-                or self.tick>200):
-            self.vivo=False
-    def draw(self,surf):
-        if not self.vivo: return
-        cx,cy=int(self.x),int(self.y)
-        # trilha
-        for i in range(1,4):
-            trail_x=cx-int(math.cos(self.ang)*i*5)
-            trail_y=cy-int(math.sin(self.ang)*i*5)
-            s=pygame.Surface((self.raio*2,self.raio*2),pygame.SRCALPHA)
-            pygame.draw.circle(s,(*self.cor,80-i*20),(self.raio,self.raio),self.raio-i)
-            surf.blit(s,(trail_x-self.raio,trail_y-self.raio))
-        pygame.draw.circle(surf,self.cor,(cx,cy),self.raio)
-        pygame.draw.circle(surf,(255,255,200),(cx,cy),self.raio,2)
+        self.life -= 1
+        self.size += 3
+        
+    def draw(self, surf):
+        if self.life <= 0:
+            return
+        alpha = int(200 * self.life / 15)
+        for i in range(3):
+            size = self.size - i * 5
+            if size > 0:
+                s = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+                pygame.draw.circle(s, (80, 200, 255, alpha - i*30), (size, size), size)
+                surf.blit(s, (int(self.x)-size, int(self.y)-size))
+                
+        for angle in range(0, 360, 45):
+            rad = math.radians(angle + self.life * 10)
+            ex = self.x + math.cos(rad) * self.size
+            ey = self.y + math.sin(rad) * self.size
+            pygame.draw.line(surf, (80, 200, 255), (int(self.x), int(self.y)), (int(ex), int(ey)), 3)
+                
     @property
-    def morto(self): return not self.vivo
+    def is_alive(self):
+        return self.life > 0
 
 
-# ══════════════════════════════════════════════
-#  JOGADOR
-# ══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════
+# PROJÉTIL
+# ═══════════════════════════════════════════════════════════════════
 
-class Jogador:
+class Bullet:
+    def __init__(self, x, y, angle, damage, speed=15, size=6, color=None):
+        self.x = x
+        self.y = y
+        self.angle = angle
+        self.damage = damage
+        self.speed = speed
+        self.size = size
+        self.color = color if color else (255, 220, 80)
+        self.life = 120
+        self.trail = []
+        self.parried = False
+
+    def update(self):
+        self.x += math.cos(self.angle) * self.speed
+        self.y += math.sin(self.angle) * self.speed
+        self.life -= 1
+        self.trail.append((self.x, self.y))
+        if len(self.trail) > 5:
+            self.trail.pop(0)
+
+    def draw(self, surf):
+        for i, (tx, ty) in enumerate(self.trail):
+            alpha = 100 - i * 20
+            size = self.size - i
+            if size > 0:
+                s = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+                pygame.draw.circle(s, (self.color[0], self.color[1], self.color[2], alpha), (size, size), size)
+                surf.blit(s, (int(tx)-size, int(ty)-size))
+                
+        color = (80, 200, 255) if self.parried else self.color
+        pygame.draw.circle(surf, color, (int(self.x), int(self.y)), self.size)
+        pygame.draw.circle(surf, (255, 255, 255), (int(self.x), int(self.y)), self.size//2)
+
+    @property
+    def is_alive(self):
+        return self.life > 0 and 0 < self.x < LARGURA and 0 < self.y < ALTURA
+
+    @property
+    def rect(self):
+        return pygame.Rect(self.x - self.size, self.y - self.size, self.size * 2, self.size * 2)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PROJÉTIL INIMIGO
+# ═══════════════════════════════════════════════════════════════════
+
+class EnemyBullet:
+    def __init__(self, x, y, angle, damage):
+        self.x = x
+        self.y = y
+        self.angle = angle
+        self.damage = damage
+        self.speed = 7
+        self.size = 6
+        self.life = 90
+
+    def update(self):
+        self.x += math.cos(self.angle) * self.speed
+        self.y += math.sin(self.angle) * self.speed
+        self.life -= 1
+
+    def draw(self, surf):
+        if self.life > 0:
+            pygame.draw.circle(surf, (200, 50, 200), (int(self.x), int(self.y)), self.size)
+            pygame.draw.circle(surf, (255, 100, 255), (int(self.x), int(self.y)), self.size//2)
+
+    @property
+    def is_alive(self):
+        return self.life > 0 and 0 < self.x < LARGURA and 0 < self.y < ALTURA
+
+    @property
+    def rect(self):
+        return pygame.Rect(self.x - self.size, self.y - self.size, self.size * 2, self.size * 2)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PARTÍCULA
+# ═══════════════════════════════════════════════════════════════════
+
+class Particle:
+    def __init__(self, x, y, color, velocity):
+        self.x = x
+        self.y = y
+        self.vx, self.vy = velocity
+        self.color = color
+        self.size = random.randint(2, 5)
+        self.life = random.randint(15, 30)
+        self.max_life = self.life
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+        self.vy += 0.15
+        self.life -= 1
+
+    def draw(self, surf):
+        if self.life <= 0:
+            return
+        alpha = int(255 * self.life / self.max_life)
+        size = int(self.size * self.life / self.max_life)
+        if size > 0:
+            s = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(s, (self.color[0], self.color[1], self.color[2], alpha), (size, size), size)
+            surf.blit(s, (int(self.x)-size, int(self.y)-size))
+
+    @property
+    def is_alive(self):
+        return self.life > 0
+
+
+# ═══════════════════════════════════════════════════════════════════
+# INIMIGO (único tipo: rápido e fraco)
+# ═══════════════════════════════════════════════════════════════════
+
+class Enemy:
+    def __init__(self, x, y, size=20):
+        self.x = x
+        self.y = y
+        self.size = size
+        self.max_health = int(size * 2.5)
+        self.health = self.max_health
+        self.speed = 2.8
+        self.damage = int(size / 4)
+        self.xp_value = int(size * 1.2)
+        self.coin_value = random.randint(5, 15)
+        self.color = (200, 50, 50)
+        
+        self.angle = random.uniform(0, math.pi * 2)
+        self.animation_phase = random.uniform(0, math.pi * 2)
+        self.knockback = 0
+        self.knockback_angle = 0
+        self.frozen_timer = 0
+
+    def update(self, player_x, player_y):
+        speed_mult = 0.5 if self.frozen_timer > 0 else 1.0
+
+        if self.frozen_timer > 0:
+            self.frozen_timer -= 1
+
+        if self.knockback > 0:
+            self.x += math.cos(self.knockback_angle) * 10
+            self.y += math.sin(self.knockback_angle) * 10
+            self.knockback -= 1
+        else:
+            dx = player_x - self.x
+            dy = player_y - self.y
+            dist = math.hypot(dx, dy)
+            if dist > 0:
+                self.angle = math.atan2(dy, dx)
+                self.x += math.cos(self.angle) * self.speed * speed_mult
+                self.y += math.sin(self.angle) * self.speed * speed_mult
+
+        margin = self.size + 20
+        self.x = max(margin, min(LARGURA - margin, self.x))
+        self.y = max(margin + 40, min(ALTURA - margin - 40, self.y))
+        self.animation_phase += 0.1
+
+    def take_damage(self, damage, has_freeze=False):
+        self.health -= damage
+        self.knockback = 8
+        if has_freeze:
+            self.frozen_timer = 60
+        return self.health <= 0
+
+    def draw(self, surf):
+        x, y = int(self.x), int(self.y)
+        size = self.size
+
+        if self.frozen_timer > 0:
+            ice_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(ice_surf, (100, 200, 255, 80), (size, size), size)
+            surf.blit(ice_surf, (x - size, y - size))
+
+        shadow_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow_surf, (0, 0, 0, 80), (size//2, size, size, size//2))
+        surf.blit(shadow_surf, (x - size, y - size//2))
+
+        body_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+        
+        for i in range(size, 0, -2):
+            alpha = int(200 * (1 - i / size))
+            c = (min(255, self.color[0] + i//2), min(255, self.color[1] + i//3), min(255, self.color[2] + i//4))
+            pygame.draw.circle(body_surf, (c[0], c[1], c[2], alpha), (size, size), i)
+
+        eye_offset_x = math.cos(self.angle) * size//4
+        eye_offset_y = math.sin(self.angle) * size//4
+
+        pygame.draw.circle(body_surf, (255, 255, 255), (int(size*0.65), int(size*0.35)), size//5)
+        pygame.draw.circle(body_surf, (255, 255, 255), (int(size*1.35), int(size*0.35)), size//5)
+        pygame.draw.circle(body_surf, (0, 0, 0), (int(size*0.65 + eye_offset_x/2), int(size*0.38 + eye_offset_y/2)), size//8)
+        pygame.draw.circle(body_surf, (0, 0, 0), (int(size*1.35 + eye_offset_x/2), int(size*0.38 + eye_offset_y/2)), size//8)
+
+        surf.blit(body_surf, (x - size, y - size))
+
+        bar_width = size * 2
+        bar_height = 5
+        health_percent = self.health / self.max_health
+        pygame.draw.rect(surf, (40, 40, 40), (x - size, y - size - 8, bar_width, bar_height), border_radius=2)
+        pygame.draw.rect(surf, (255, 80, 80), (x - size, y - size - 8, bar_width * health_percent, bar_height), border_radius=2)
+
+    @property
+    def rect(self):
+        return pygame.Rect(self.x - self.size, self.y - self.size, self.size * 2, self.size * 2)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# BOSS
+# ═══════════════════════════════════════════════════════════════════
+
+class Boss(Enemy):
+    def __init__(self, x, y, wave):
+        super().__init__(x, y, 60 + wave * 5)
+        self.is_boss = True
+        self.wave = wave
+        self.max_health = int(self.size * 8)
+        self.health = self.max_health
+        self.xp_value = 300 + wave * 50
+        self.coin_value = 100 + wave * 20
+        self.speed = 1.5
+        self.color = (100, 30, 150)
+        self.attack_cooldown = 0
+        self.attack_pattern = 0
+        self.projectiles = []
+
+    def update(self, player_x, player_y):
+        super().update(player_x, player_y)
+
+        if self.attack_cooldown <= 0:
+            self.attack_pattern = (self.attack_pattern + 1) % 3
+            self.shoot_pattern(player_x, player_y)
+            self.attack_cooldown = 90
+        else:
+            self.attack_cooldown -= 1
+
+        for p in self.projectiles[:]:
+            p.update()
+            if not p.is_alive:
+                self.projectiles.remove(p)
+
+    def shoot_pattern(self, target_x, target_y):
+        angle = math.atan2(target_y - self.y, target_x - self.x)
+
+        if self.attack_pattern == 0:
+            for i in range(-2, 3):
+                bullet = Bullet(self.x, self.y, angle + i * 0.15, self.damage, speed=8, size=8, color=(200, 50, 200))
+                self.projectiles.append(bullet)
+        elif self.attack_pattern == 1:
+            for i in range(8):
+                spiral_angle = angle + (i * math.pi * 2 / 8) + self.attack_cooldown * 0.1
+                bullet = Bullet(self.x, self.y, spiral_angle, self.damage // 2, speed=6, size=6, color=(200, 100, 200))
+                self.projectiles.append(bullet)
+        else:
+            for i in range(3):
+                bullet = Bullet(self.x, self.y, angle + random.uniform(-0.3, 0.3), self.damage * 1.5, speed=10, size=10, color=(255, 100, 255))
+                self.projectiles.append(bullet)
+
+    def draw(self, surf):
+        super().draw(surf)
+
+        for p in self.projectiles:
+            p.draw(surf)
+
+        font = pygame.font.Font(None, 28)
+        boss_name = font.render(f"⚠️ BOSS - Wave {self.wave} ⚠️", True, (255, 215, 0))
+        x, y = int(self.x), int(self.y)
+        surf.blit(boss_name, (x - boss_name.get_width()//2, y - self.size - 35))
+
+        bar_w = LARGURA - 200
+        bar_h = 20
+        health_percent = self.health / self.max_health
+        pygame.draw.rect(surf, (40, 40, 40), (100, 30, bar_w, bar_h), border_radius=10)
+        pygame.draw.rect(surf, (255, 80, 80), (100, 30, bar_w * health_percent, bar_h), border_radius=10)
+
+        health_text = font.render(f"{int(self.health)}/{int(self.max_health)}", True, (240, 240, 240))
+        surf.blit(health_text, (LARGURA//2 - health_text.get_width()//2, 32))
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CARNE (DROP)
+# ═══════════════════════════════════════════════════════════════════
+
+class MeatDrop:
+    def __init__(self, x, y, xp_value, coin_value):
+        self.x = x
+        self.y = y
+        self.xp_value = xp_value
+        self.coin_value = coin_value
+        self.size = 8 + min(15, xp_value // 10)
+        self.float_offset = random.uniform(0, math.pi * 2)
+        self.life = 300
+
+    def update(self):
+        self.life -= 1
+
+    def draw(self, surf, tick):
+        if self.life < 60 and (tick // 6) % 2 == 0:
+            return
+
+        float_y = self.y + math.sin(tick * 0.05 + self.float_offset) * 3
+        x, y = int(self.x), int(float_y)
+
+        pygame.draw.ellipse(surf, (0, 0, 0, 60), (x - self.size, y + self.size//2, self.size*2, self.size//2))
+
+        meat_surf = pygame.Surface((self.size*2, self.size*2), pygame.SRCALPHA)
+        pygame.draw.ellipse(meat_surf, (180, 50, 40), (0, self.size//2, self.size*2, self.size))
+        pygame.draw.ellipse(meat_surf, (140, 30, 20), (self.size//2, self.size//2, self.size, self.size//2))
+
+        surf.blit(meat_surf, (x - self.size, y - self.size))
+
+        font = pygame.font.Font(None, 12)
+        xp_text = font.render(f"+{self.xp_value} XP", True, (100, 255, 100))
+        coin_text = font.render(f"+{self.coin_value}💰", True, (255, 215, 0))
+        surf.blit(xp_text, (x - xp_text.get_width()//2, y - self.size - 10))
+        surf.blit(coin_text, (x - coin_text.get_width()//2, y + self.size + 2))
+
+    @property
+    def is_alive(self):
+        return self.life > 0
+
+    @property
+    def rect(self):
+        return pygame.Rect(self.x - self.size, self.y - self.size, self.size * 2, self.size * 2)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# JOGADOR
+# ═══════════════════════════════════════════════════════════════════
+
+class Player:
     def __init__(self):
-        self.x=float(LARGURA//2); self.y=float(ALTURA//2)
-        self.raio=18; self.raio_base=18
-        self.vida=100; self.vida_max=100
-        self.vel_base=2.2
-        self.dano=15
-        self.nivel=1
-        self.xp=0; self.xp_prox=60
-
-        # Multiplicadores
-        self.mult_vel=1.0; self.mult_dano=1.0
-        self.mult_def=1.0; self.mult_xp=1.0
-        self.mult_raio_col=1.0
-
-        # Flags especiais
-        self.regen_ps=0; self.regen_tick=0
-        self.tem_espinhos=False; self.tem_veneno=False
-        self.tem_camuflagem=False; self.tem_dash=False
-        self.tem_aura_fogo=False; self.tem_aura_veneno=False
-        self.mult_percepcao=1.0
-        self.cura_nivel=False
-
-        self.evos_ativas:list[dict]=[]
-        self.vivo=True
-        self.invencivel=0; self.atacando=0
-        self.tick=0
+        self.x = LARGURA // 2
+        self.y = ALTURA // 2
+        self.size = 18
+        self.health = 100
+        self.max_health = 100
+        self.base_speed = 4.5
+        self.speed = self.base_speed
+        self.damage = 20
+        self.fire_rate = 8
+        self.fire_timer = 0
+        self.bullets = []
 
         # Dash
-        self.dash_vel=0.0; self.dash_ang=0.0; self.dash_cooldown=0
+        self.dash_cooldown = 0
+        self.dash_duration = 0
+        self.dash_velocity = 0
+        self.dash_angle = 0
+        self.dash_cooldown_max = 40
 
-    @property
-    def raio_coleta(self): return (self.raio+22)*self.mult_raio_col
-    @property
-    def vel(self): return self.vel_base*self.mult_vel
+        # Parry
+        self.parry_timer = 0
+        self.parry_cooldown = 0
+        self.parry_duration = 8
 
-    def aplicar_evo(self,evo):
-        self.evos_ativas.append(evo)
-        if "vel"         in evo: self.mult_vel     *=evo["vel"]
-        if "dano"        in evo: self.mult_dano    *=evo["dano"]
-        if "def"         in evo: self.mult_def     *=evo["def"]
-        if "xp_bonus"    in evo: self.mult_xp      *=evo["xp_bonus"]
-        if "raio_coleta" in evo: self.mult_raio_col*=evo["raio_coleta"]
-        if "regen"       in evo: self.regen_ps     +=evo["regen"]
-        if "espinhos"    in evo: self.tem_espinhos  =True
-        if "veneno"      in evo: self.tem_veneno    =True
-        if "camuflagem"  in evo: self.tem_camuflagem=True
-        if "dash"        in evo: self.tem_dash      =True
-        if "aura_fogo"   in evo: self.tem_aura_fogo =True
-        if "aura_veneno" in evo: self.tem_aura_veneno=True
-        if "percep"      in evo: self.mult_percepcao*=evo["percep"]
-        if "cura_nivel"  in evo: self.cura_nivel    =True
-        if "vida" in evo:
-            self.vida_max+=evo["vida"]; self.vida+=evo["vida"]
-        if "tamanho" in evo:
-            self.raio=int(self.raio_base*evo["tamanho"])
-            self.raio_base=self.raio
-        self.nivel+=1
-        if self.cura_nivel:
-            self.vida=min(self.vida_max,int(self.vida+self.vida_max*0.3))
+        # Upgrades
+        self.vampirism = False
+        self.double_shot = False
+        self.explosive = False
+        self.ricochet = False
+        self.fast_shoot = False
+        self.pierce = False
+        self.shield = 0
+        self.is_crab = False
 
-    def ganhar_xp(self,qtd):
-        self.xp+=int(qtd*self.mult_xp)
-        if self.xp>=self.xp_prox:
-            self.xp-=self.xp_prox
-            self.xp_prox=int(self.xp_prox*1.32)
+        self.defense_mult = 1.0
+        self.regen_rate = 0
+        self.regen_timer = 0
+        self.xp_mult = 1.0
+        self.coin_mult = 1.0
+        self.bullet_speed_mult = 1.0
+        self.bullet_size_mult = 1.0
+        self.collect_mult = 1.0
+
+        self.has_rage = False
+        self.has_freeze = False
+        self.has_chain = False
+        self.level_upgrades = []
+
+        self.rage_timer = 0
+        self.rage_damage_mult = 1.0
+
+        self.level = 1
+        self.xp = 0
+        self.xp_to_next = 60
+        self.coins = 0
+        self.invincible_timer = 0
+        self.animation_phase = 0
+
+        self.combo = 0
+        self.combo_timer = 0
+        self.max_combo = 0
+
+        self.alive = True
+        self.boss_upgrades = []
+
+        self.stats = {
+            "kills": 0,
+            "boss_kills": 0,
+            "deaths": 0,
+            "coins_collected": 0,
+            "damage_dealt": 0,
+            "damage_taken": 0
+        }
+
+    def update(self, keys, mouse_pos, mouse_buttons):
+        if not self.alive:
+            return
+
+        if self.combo_timer > 0:
+            self.combo_timer -= 1
+            if self.combo_timer <= 0:
+                self.combo = 0
+
+        # Movimento
+        dx = dy = 0
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]: dx = -1
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d]: dx = 1
+        if keys[pygame.K_UP] or keys[pygame.K_w]: dy = -1
+        if keys[pygame.K_DOWN] or keys[pygame.K_s]: dy = 1
+
+        if dx != 0 or dy != 0:
+            length = math.hypot(dx, dy)
+            dx /= length
+            dy /= length
+
+        # Dash
+        if keys[pygame.K_LSHIFT] and self.dash_cooldown == 0 and self.dash_duration == 0:
+            self.dash_duration = 12
+            self.dash_cooldown = self.dash_cooldown_max
+            self.invincible_timer = 15
+            dash_power = 18 * (1 + (self.speed - self.base_speed) / self.base_speed)
+            self.dash_velocity = dash_power
+            self.dash_angle = math.atan2(dy, dx) if (dx != 0 or dy != 0) else 0
+
+        if self.dash_duration > 0:
+            self.x += math.cos(self.dash_angle) * self.dash_velocity
+            self.y += math.sin(self.dash_angle) * self.dash_velocity
+            self.dash_duration -= 1
+            if self.dash_duration == 0:
+                self.dash_velocity = 0
+        else:
+            self.x += dx * self.speed
+            self.y += dy * self.speed
+
+        # Parry
+        if mouse_buttons[2] and self.parry_cooldown == 0 and self.parry_timer == 0:
+            self.parry_timer = self.parry_duration
+            self.parry_cooldown = 30
+            self.invincible_timer = self.parry_duration
+
+        if self.parry_timer > 0:
+            self.parry_timer -= 1
+        if self.parry_cooldown > 0:
+            self.parry_cooldown -= 1
+
+        # Limites
+        margin = self.size + 20
+        self.x = max(margin, min(LARGURA - margin, self.x))
+        self.y = max(margin + 40, min(ALTURA - margin - 40, self.y))
+
+        # Atirar
+        if mouse_buttons[0] and self.fire_timer <= 0:
+            fire_delay = self.fire_rate
+            if self.fast_shoot:
+                fire_delay = self.fire_rate // 2
+
+            mx, my = mouse_pos
+            angle = math.atan2(my - self.y, mx - self.x)
+
+            bullet_speed = 15 * self.bullet_speed_mult
+            bullet_size = int(6 * self.bullet_size_mult)
+            damage = self.damage * self.rage_damage_mult
+
+            if self.double_shot:
+                self.bullets.append(Bullet(self.x, self.y, angle + 0.1, damage, speed=bullet_speed, size=bullet_size))
+                self.bullets.append(Bullet(self.x, self.y, angle - 0.1, damage, speed=bullet_speed, size=bullet_size))
+            else:
+                self.bullets.append(Bullet(self.x, self.y, angle, damage, speed=bullet_speed, size=bullet_size))
+
+            self.fire_timer = fire_delay
+
+        if self.fire_timer > 0:
+            self.fire_timer -= 1
+
+        for bullet in self.bullets[:]:
+            bullet.update()
+            if not bullet.is_alive:
+                self.bullets.remove(bullet)
+
+        if self.invincible_timer > 0:
+            self.invincible_timer -= 1
+        if self.dash_cooldown > 0:
+            self.dash_cooldown -= 1
+
+        if self.regen_rate > 0:
+            self.regen_timer += 1
+            if self.regen_timer >= 60:
+                self.regen_timer = 0
+                self.health = min(self.max_health, self.health + self.regen_rate)
+
+        if self.rage_timer > 0:
+            self.rage_timer -= 1
+            if self.rage_timer <= 0:
+                self.rage_damage_mult = 1.0
+
+        self.animation_phase += 0.1
+
+    def apply_level_upgrade(self, upgrade):
+        self.level_upgrades.append(upgrade)
+
+        if "dano" in upgrade:
+            self.damage = int(self.damage * upgrade["dano"])
+        if "speed" in upgrade:
+            self.speed = self.base_speed * upgrade["speed"]
+        if "max_hp" in upgrade:
+            self.max_health += upgrade["max_hp"]
+            self.health += upgrade["max_hp"]
+            self.health = min(self.health, self.max_health)
+        if "defense" in upgrade:
+            self.defense_mult *= upgrade["defense"]
+        if "regen" in upgrade:
+            self.regen_rate += upgrade["regen"]
+        if "fire_rate" in upgrade:
+            self.fire_rate = int(self.fire_rate * upgrade["fire_rate"])
+            self.fire_rate = max(3, self.fire_rate)
+        if "xp_bonus" in upgrade:
+            self.xp_mult *= upgrade["xp_bonus"]
+        if "coin_bonus" in upgrade:
+            self.coin_mult *= upgrade["coin_bonus"]
+        if "bullet_speed" in upgrade:
+            self.bullet_speed_mult *= upgrade["bullet_speed"]
+        if "bullet_size" in upgrade:
+            self.bullet_size_mult *= upgrade["bullet_size"]
+        if "collect_radius" in upgrade:
+            self.collect_mult *= upgrade["collect_radius"]
+        if "dash_cooldown" in upgrade:
+            self.dash_cooldown_max = int(40 * upgrade["dash_cooldown"])
+        if upgrade.get("rage"):
+            self.has_rage = True
+        if upgrade.get("freeze"):
+            self.has_freeze = True
+        if upgrade.get("chain"):
+            self.has_chain = True
+
+    def gain_xp(self, amount):
+        self.xp += int(amount * self.xp_mult)
+        if self.xp >= self.xp_to_next:
+            self.xp -= self.xp_to_next
+            self.xp_to_next = int(self.xp_to_next * 1.3)
+            self.level += 1
             return True
         return False
 
-    def hit(self,dano):
-        if self.invencivel>0: return
-        d=max(1,int(dano*self.mult_def))
-        self.vida-=d; self.invencivel=50
-        if self.vida<=0: self.vida=0; self.vivo=False
+    def gain_coins(self, amount):
+        coins_gained = int(amount * self.coin_mult)
+        self.coins += coins_gained
+        self.stats["coins_collected"] += coins_gained
+        return coins_gained
 
-    def update(self,teclas):
-        if not self.vivo: return
-        self.tick+=1
-        if self.invencivel>0: self.invencivel-=1
-        if self.atacando>0: self.atacando-=1
-        if self.dash_cooldown>0: self.dash_cooldown-=1
+    def add_combo(self):
+        self.combo += 1
+        self.combo_timer = 120
+        if self.combo > self.max_combo:
+            self.max_combo = self.combo
 
-        dx,dy=0,0
-        if teclas[pygame.K_LEFT]  or teclas[pygame.K_a]: dx-=1
-        if teclas[pygame.K_RIGHT] or teclas[pygame.K_d]: dx+=1
-        if teclas[pygame.K_UP]    or teclas[pygame.K_w]: dy-=1
-        if teclas[pygame.K_DOWN]  or teclas[pygame.K_s]: dy+=1
-        if dx!=0 and dy!=0: dx*=0.7071; dy*=0.7071
+    def take_damage(self, damage):
+        if self.invincible_timer > 0 or self.parry_timer > 0:
+            return False
 
-        # Dash (Shift)
-        if self.tem_dash and teclas[pygame.K_LSHIFT] and self.dash_cooldown==0 and (dx or dy):
-            self.dash_vel=12.0
-            self.dash_ang=math.atan2(dy,dx)
-            self.dash_cooldown=60
-            self.invencivel=max(self.invencivel,15)
+        if self.has_rage and damage > 0:
+            self.rage_timer = 600
+            self.rage_damage_mult = 1.3
 
-        if self.dash_vel>0:
-            self.x+=math.cos(self.dash_ang)*self.dash_vel
-            self.y+=math.sin(self.dash_ang)*self.dash_vel
-            self.dash_vel=max(0,self.dash_vel-1.5)
-        else:
-            self.x+=dx*self.vel; self.y+=dy*self.vel
+        if self.shield > 0:
+            absorbed = min(self.shield, damage)
+            self.shield -= absorbed
+            damage -= absorbed
+            if damage <= 0:
+                self.invincible_timer = 20
+                return False
 
-        self.x=max(self.raio,min(LARGURA-self.raio,self.x))
-        self.y=max(self.raio+55,min(ALTURA-self.raio-55,self.y))
+        damage = int(damage * self.defense_mult)
+        self.health -= damage
+        self.stats["damage_taken"] += damage
+        self.invincible_timer = 40
+        self.combo = 0
 
-        # Regen
-        if self.regen_ps>0:
-            self.regen_tick+=1
-            if self.regen_tick>=FPS:
-                self.regen_tick=0
-                self.vida=min(self.vida_max,self.vida+self.regen_ps)
+        if self.health <= 0:
+            self.health = 0
+            self.alive = False
+            self.stats["deaths"] += 1
+        return True
 
-    # ── Visual ───────────────────────────────────────────────────────
-    def draw(self,surf):
-        if not self.vivo: return
-        if self.invencivel>0 and (self.invencivel//5)%2==0: return
-        cx,cy=int(self.x),int(self.y); r=self.raio; t=self.tick
-        nomes=[e["nome"] for e in self.evos_ativas]
+    def heal(self, amount):
+        self.health = min(self.max_health, self.health + amount)
 
-        # Cor base
-        cor=C_PLAYER
-        if "Carcinização" in nomes or "Omega Caranguejo" in nomes:
-            cor=(210,55,15)
-        elif "Aura de Fogo" in nomes:
-            cor=(220,90,20)
-        elif "Ferrão Venenoso" in nomes or "Veneno em Área" in nomes:
-            cor=(80,200,50)
-        elif "Camuflagem" in nomes:
-            cor=(70,140,55)
-        elif "Instinto Predador" in nomes:
-            cor=(180,30,30)
-        cor2=ipcor(cor,(255,255,255),0.35)
+    def add_boss_upgrade(self, upgrade):
+        self.boss_upgrades.append(upgrade)
+        efeito = upgrade["efeito"]
 
-        # ── Aura de fogo ──────────────────────────────────────────────
-        if self.tem_aura_fogo:
-            for i in range(3):
-                ar=r+8+i*6+int(math.sin(t*0.15+i)*4)
-                s=pygame.Surface((ar*2,ar*2),pygame.SRCALPHA)
-                pygame.draw.circle(s,(255,100,20,30-i*8),(ar,ar),ar)
-                surf.blit(s,(cx-ar,cy-ar))
+        if efeito == "vampirism":
+            self.vampirism = True
+        elif efeito == "double_shot":
+            self.double_shot = True
+        elif efeito == "explosive":
+            self.explosive = True
+        elif efeito == "ricochet":
+            self.ricochet = True
+        elif efeito == "fast_shoot":
+            self.fast_shoot = True
+        elif efeito == "pierce":
+            self.pierce = True
+        elif efeito == "shield":
+            self.shield = 50
+        elif efeito == "crab":
+            self.is_crab = True
+            self.damage = int(self.damage * 1.5)
+            self.speed *= 1.2
+            self.max_health += 50
+            self.health += 50
 
-        # ── Aura de veneno ────────────────────────────────────────────
-        if self.tem_aura_veneno:
-            av=r+15+int(math.sin(t*0.1)*5)
-            s=pygame.Surface((av*2,av*2),pygame.SRCALPHA)
-            pygame.draw.circle(s,(80,220,40,35),(av,av),av)
-            surf.blit(s,(cx-av,cy-av))
+    def draw(self, surf):
+        if not self.alive:
+            return
 
-        # ── Dash trail ────────────────────────────────────────────────
-        if self.dash_vel>2:
-            for i in range(1,5):
-                tx=cx-int(math.cos(self.dash_ang)*i*8)
-                ty=cy-int(math.sin(self.dash_ang)*i*8)
-                s=pygame.Surface((r*2,r*2),pygame.SRCALPHA)
-                pygame.draw.circle(s,(*cor,50-i*10),(r,r),r-i*2)
-                surf.blit(s,(tx-r,ty-r))
+        if self.invincible_timer > 0 and (self.invincible_timer // 3) % 2 == 0:
+            return
 
-        # ── Asas ──────────────────────────────────────────────────────
-        if "Asas de Morcego" in nomes or "Propulsão" in nomes:
-            bat=math.sin(t*0.2)*22
-            for lado in(-1,1):
-                pts=[(cx,cy-r//2),
-                     (cx+lado*(r+int(bat)),cy-r-18),
-                     (cx+lado*(r+10),cy+5)]
-                pygame.draw.polygon(surf,(160,100,200),pts)
-                pygame.draw.polygon(surf,(120,60,160),pts,2)
+        x, y = int(self.x), int(self.y)
+        size = self.size
+        color = (210, 70, 40) if self.is_crab else (70, 150, 230)
 
-        # ── Patas / Pinças ────────────────────────────────────────────
-        tem_patas=any(n in nomes for n in ["Patas Ágeis","Carcinização","Pernas de Saltador",
-                                            "Omega Caranguejo","Pinças de Caranguejo"])
-        if tem_patas:
-            for i in range(3):
-                for lado in(-1,1):
-                    ba=math.radians(lado*(30+i*28))
-                    osc=math.sin(t*0.14+i)*12*lado
-                    ar=ba+math.radians(osc)+math.pi/2
-                    ox=cx+lado*int(r*0.6); oy=cy+(i-1)*int(r*0.42)
-                    fx=ox+math.cos(ar)*r*0.95; fy=oy+math.sin(ar)*r*0.95
-                    pygame.draw.line(surf,cor2,(ox,oy),(int(fx),int(fy)),max(2,r//6))
+        # Efeito de parry
+        if self.parry_timer > 0:
+            parry_size = size + 20
+            parry_surf = pygame.Surface((parry_size*2, parry_size*2), pygame.SRCALPHA)
+            alpha = 150 - int(math.sin(self.animation_phase * 20) * 50)
+            pygame.draw.circle(parry_surf, (80, 200, 255, alpha), (parry_size, parry_size), parry_size)
+            surf.blit(parry_surf, (x - parry_size, y - parry_size))
 
-        # ── Espinhos ──────────────────────────────────────────────────
-        if self.tem_espinhos:
-            for k in range(8):
-                ar=math.radians(k*45+t*1.5)
-                sx=cx+math.cos(ar)*r; sy=cy+math.sin(ar)*r
-                ex2=cx+math.cos(ar)*(r+12); ey2=cy+math.sin(ar)*(r+12)
-                pygame.draw.line(surf,(160,230,60),(int(sx),int(sy)),(int(ex2),int(ey2)),2)
+        # Trail do dash
+        if self.dash_duration > 0:
+            for i in range(1, 5):
+                trail_x = x - int(math.cos(self.dash_angle) * i * 15)
+                trail_y = y - int(math.sin(self.dash_angle) * i * 15)
+                s = pygame.Surface((size, size), pygame.SRCALPHA)
+                pygame.draw.circle(s, (100, 200, 255, 150), (size//2, size//2), size//2)
+                surf.blit(s, (trail_x - size//2, trail_y - size//2))
 
-        # ── Corpo ─────────────────────────────────────────────────────
-        pygame.draw.circle(surf,cor,(cx,cy),r)
-        # padrão orgânico
-        pygame.draw.circle(surf,cor2,(cx,cy-r//4),int(r*0.62))
-        # contorno
-        pygame.draw.circle(surf,ipcor(cor,(0,0,0),0.25),(cx,cy),r,2)
+        if self.shield > 0:
+            shield_radius = size + 8
+            shield_surf = pygame.Surface((shield_radius*2, shield_radius*2), pygame.SRCALPHA)
+            alpha = 100 + int(math.sin(self.animation_phase * 10) * 30)
+            pygame.draw.circle(shield_surf, (100, 150, 255, alpha), (shield_radius, shield_radius), shield_radius, 3)
+            surf.blit(shield_surf, (x - shield_radius, y - shield_radius))
 
-        # ── Garras / Pinças ───────────────────────────────────────────
-        tem_garras=any(n in nomes for n in ["Garras Afiadas","Pinças de Caranguejo",
-                                             "Mandíbulas","Carcinização","Presas de Sabre",
-                                             "Instinto Predador","Omega Caranguejo"])
-        if tem_garras:
-            for lado in(-1,1):
-                gx=cx+lado*(r+10); gy=cy-4
-                ab=int(math.sin(t*0.1)*7)*lado
-                pygame.draw.circle(surf,cor,(gx,gy),r//2)
-                pygame.draw.line(surf,cor2,(gx,gy-4),(gx+lado*10,gy-12-ab),max(2,r//5))
-                pygame.draw.line(surf,cor2,(gx,gy+2),(gx+lado*10,gy+8+ab),max(2,r//5))
+        if self.rage_timer > 0:
+            rage_size = size + 12
+            rage_surf = pygame.Surface((rage_size*2, rage_size*2), pygame.SRCALPHA)
+            alpha = 80 + int(math.sin(self.animation_phase * 20) * 40)
+            pygame.draw.circle(rage_surf, (255, 50, 50, alpha), (rage_size, rage_size), rage_size)
+            surf.blit(rage_surf, (x - rage_size, y - rage_size))
 
-        # ── Chifre ────────────────────────────────────────────────────
-        if any(n in nomes for n in ["Chifres","Presas de Sabre","Fúria Primordial"]):
-            pygame.draw.polygon(surf,ipcor(cor,(255,220,100),0.4),[
-                (cx,cy-r-3),(cx-5,cy-r-16),(cx+5,cy-r-16)])
-            if "Chifres" in nomes:  # duplo
-                for lado in(-1,1):
-                    pygame.draw.polygon(surf,ipcor(cor,(255,220,100),0.4),[
-                        (cx+lado*8,cy-r+2),(cx+lado*3,cy-r-12),(cx+lado*13,cy-r-12)])
+        pygame.draw.ellipse(surf, (0, 0, 0, 80), (x - size, y + size//2, size*2, size//2))
 
-        # ── Ferrão ────────────────────────────────────────────────────
-        if self.tem_veneno or "Ferrão Venenoso" in nomes:
-            pygame.draw.polygon(surf,(60,210,30),[
-                (cx,cy-r-1),(cx-5,cy-r-15),(cx+5,cy-r-15)])
+        body_surf = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
 
-        # ── Nadadeiras ────────────────────────────────────────────────
-        if "Nadadeiras" in nomes:
-            for lado in(-1,1):
-                ond=int(math.sin(t*0.17)*7)*lado
-                pts=[(cx,cy),(cx+lado*(r+5),cy-9+ond),(cx+lado*(r+5),cy+9+ond)]
-                pygame.draw.polygon(surf,cor2,pts)
+        for i in range(size, 0, -2):
+            alpha = int(200 * (1 - i / size))
+            c = (min(255, color[0] + i//2), min(255, color[1] + i//3), min(255, color[2] + i//2))
+            pygame.draw.circle(body_surf, (c[0], c[1], c[2], alpha), (size, size), i)
 
-        # ── Coroa (evolução de boss) ───────────────────────────────────
-        if "Coroa do Rei" in nomes:
-            pts=[(cx-12,cy-r-2),(cx-12,cy-r-14),(cx-6,cy-r-8),
-                 (cx,cy-r-18),(cx+6,cy-r-8),(cx+12,cy-r-14),(cx+12,cy-r-2)]
-            pygame.draw.polygon(surf,C_OURO,pts)
-            pygame.draw.polygon(surf,(200,160,20),pts,2)
+        mx, my = pygame.mouse.get_pos()
+        dx = mx - x
+        dy = my - y
+        dist = math.hypot(dx, dy)
+        if dist > 0:
+            dx /= dist
+            dy /= dist
 
-        # ── Olhos ─────────────────────────────────────────────────────
-        n_olhos=3 if "Olho de Aguia" in nomes else 2
-        olho_pos=[(-int(r*0.35),-int(r*0.28)),(int(r*0.35),-int(r*0.28))]
-        if n_olhos==3: olho_pos.append((0,-int(r*0.5)))
-        for ox2,oy2 in olho_pos:
-            ex=cx+ox2; ey=cy+oy2
-            pygame.draw.circle(surf,(255,250,200),(ex,ey),max(3,r//4))
-            pupila_cor=(200,0,0) if "Instinto Predador" in nomes or "Fúria Primordial" in nomes else (15,15,15)
-            pygame.draw.circle(surf,pupila_cor,(ex+(1 if ox2>0 else -1),ey+1),max(1,r//7))
+        eye_offset_x = dx * size//4
+        eye_offset_y = dy * size//4
+
+        pygame.draw.circle(body_surf, (255, 255, 255), (int(size*0.65), int(size*0.35)), size//5)
+        pygame.draw.circle(body_surf, (255, 255, 255), (int(size*1.35), int(size*0.35)), size//5)
+        pygame.draw.circle(body_surf, (0, 0, 0), (int(size*0.65 + eye_offset_x), int(size*0.38 + eye_offset_y)), size//8)
+        pygame.draw.circle(body_surf, (0, 0, 0), (int(size*1.35 + eye_offset_x), int(size*0.38 + eye_offset_y)), size//8)
+
+        weapon_angle = math.atan2(my - y, mx - x)
+        weapon_x = size + math.cos(weapon_angle) * size
+        weapon_y = size + math.sin(weapon_angle) * size
+        pygame.draw.line(body_surf, (100, 100, 150), (size, size), (weapon_x, weapon_y), 4)
+        pygame.draw.circle(body_surf, (150, 150, 200), (int(weapon_x), int(weapon_y)), 4)
+
+        if self.is_crab:
+            pygame.draw.polygon(body_surf, (200, 80, 50), [(size, size//4), (size - 10, size//4 - 15), (size + 10, size//4 - 15)])
+
+        surf.blit(body_surf, (x - size, y - size))
+
+        if self.shield > 0:
+            shield_percent = self.shield / 50
+            bar_w = size * 2
+            pygame.draw.rect(surf, (40, 40, 40), (x - size, y - size - 20, bar_w, 4), border_radius=2)
+            pygame.draw.rect(surf, (100, 150, 255), (x - size, y - size - 20, bar_w * shield_percent, 4), border_radius=2)
+
+        bar_width = size * 2
+        health_percent = self.health / self.max_health
+        pygame.draw.rect(surf, (40, 40, 40), (x - size, y - size - 10, bar_width, 6), border_radius=3)
+        pygame.draw.rect(surf, (255, 80, 80), (x - size, y - size - 10, bar_width * health_percent, 6), border_radius=3)
+
+        xp_percent = self.xp / self.xp_to_next
+        pygame.draw.rect(surf, (40, 40, 40), (x - size, y - size - 17, bar_width, 4), border_radius=2)
+        pygame.draw.rect(surf, (100, 255, 100), (x - size, y - size - 17, bar_width * xp_percent, 4), border_radius=2)
+
+        font = pygame.font.Font(None, 18)
+        level_text = font.render(str(self.level), True, (255, 215, 0))
+        surf.blit(level_text, (x + size - 15, y - size - 20))
+
+        if self.combo > 0:
+            combo_text = font.render(f"COMBO x{self.combo}", True, (255, 215, 0))
+            surf.blit(combo_text, (x - combo_text.get_width()//2, y - size - 35))
+
+        # Indicador de parry cooldown
+        if self.parry_cooldown > 0:
+            cd_percent = self.parry_cooldown / 30
+            cd_x = x - size - 5
+            cd_y = y
+            pygame.draw.arc(surf, (80, 80, 80), (cd_x, cd_y, 15, 15), 0, math.pi * 2, 2)
+            pygame.draw.arc(surf, (80, 200, 255), (cd_x, cd_y, 15, 15), 0, math.pi * 2 * (1 - cd_percent), 2)
+
+    @property
+    def rect(self):
+        return pygame.Rect(self.x - self.size, self.y - self.size, self.size * 2, self.size * 2)
+
+    @property
+    def collect_radius(self):
+        return self.size + 20 * self.collect_mult
 
 
-# ══════════════════════════════════════════════
-#  TELA DE EVOLUÇÃO
-# ══════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════════
+# TELAS
+# ═══════════════════════════════════════════════════════════════════
 
-_fonte_peq_global=None   # referência global para o Boss usar
+def level_upgrade_screen(screen, clock):
+    font_title = pygame.font.Font(None, 48)
+    font_name = pygame.font.Font(None, 28)
+    font_desc = pygame.font.Font(None, 20)
+    font_small = pygame.font.Font(None, 16)
 
-def tela_evolucao(surf,clock,ft,fn,fp,boss_evo=False):
-    """Mostra 3 cartas de evolução; retorna a escolhida."""
-    global _fonte_peq_global
-    opcoes=random.sample(EVOLUCOES_BOSS,min(3,len(EVOLUCOES_BOSS))) if boss_evo else escolher_evo_pool(3)
-    cw,ch=230,300; gap=28
-    total=cw*3+gap*2; cx_ini=(LARGURA-total)//2; cy_ini=(ALTURA-ch)//2
-    sel=None; hover=-1; tick=0
+    def get_weighted_upgrades():
+        pool = []
+        for up in LEVEL_UPGRADES:
+            weight = {1: 10, 2: 4, 3: 1}[up.get("rar", 1)]
+            pool.extend([up] * weight)
+        return random.sample(pool, min(3, len(pool)))
 
-    while sel is None:
-        for ev in pygame.event.get():
-            if ev.type==pygame.QUIT: pygame.quit(); sys.exit()
-            if ev.type==pygame.KEYDOWN:
-                if ev.key==pygame.K_1: sel=0
-                elif ev.key==pygame.K_2: sel=1
-                elif ev.key==pygame.K_3: sel=2
-            if ev.type==pygame.MOUSEBUTTONDOWN and ev.button==1:
-                mx,my=ev.pos
+    options = get_weighted_upgrades()
+    selected = None
+    hover_index = -1
+    tick = 0
+
+    card_w, card_h = 280, 240
+    gap = 30
+    total_w = card_w * 3 + gap * 2
+    start_x = (LARGURA - total_w) // 2
+    start_y = (ALTURA - card_h) // 2
+
+    while selected is None:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    selected = 0
+                elif event.key == pygame.K_2:
+                    selected = 1
+                elif event.key == pygame.K_3:
+                    selected = 2
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mx, my = event.pos
                 for i in range(3):
-                    ccx=cx_ini+i*(cw+gap)
-                    if ccx<=mx<=ccx+cw and cy_ini<=my<=cy_ini+ch: sel=i
+                    cx = start_x + i * (card_w + gap)
+                    if cx <= mx <= cx + card_w and start_y <= my <= start_y + card_h:
+                        selected = i
 
-        mx,my=pygame.mouse.get_pos(); hover=-1
+        mx, my = pygame.mouse.get_pos()
+        hover_index = -1
         for i in range(3):
-            ccx=cx_ini+i*(cw+gap)
-            if ccx<=mx<=ccx+cw and cy_ini<=my<=cy_ini+ch: hover=i
-        tick+=1
+            cx = start_x + i * (card_w + gap)
+            if cx <= mx <= cx + card_w and start_y <= my <= start_y + card_h:
+                hover_index = i
 
-        ov=pygame.Surface((LARGURA,ALTURA),pygame.SRCALPHA)
-        ov.fill((0,0,0,190)); surf.blit(ov,(0,0))
+        tick += 1
 
-        tit_txt="⚡ BOSS DERROTADO! Evolução Épica:" if boss_evo else "✨ EVOLUÇÃO! Escolha:"
-        tit=ft.render(tit_txt,True,C_OURO if boss_evo else (255,220,70))
-        surf.blit(tit,(LARGURA//2-tit.get_width()//2,cy_ini-58))
-        sub=fp.render("Clique na carta ou tecle 1 / 2 / 3",True,(170,170,170))
-        surf.blit(sub,(LARGURA//2-sub.get_width()//2,cy_ini-28))
+        overlay = pygame.Surface((LARGURA, ALTURA))
+        overlay.set_alpha(180 + int(math.sin(tick * 0.05) * 20))
+        overlay.fill((0, 0, 0))
+        screen.blit(overlay, (0, 0))
 
-        for i,evo in enumerate(opcoes):
-            ccx=cx_ini+i*(cw+gap)
-            is_h=(i==hover)
-            cy_c=cy_ini-(14 if is_h else 0)
-            rar=evo["rar"]
-            cor_card=(55,45,70) if rar==3 else ((50,65,80) if rar==2 else (45,58,45))
-            cor_borda=(220,170,30) if rar==3 else ((80,160,220) if rar==2 else (90,160,90))
-            if is_h: cor_borda=ipcor(cor_borda,(255,255,255),0.3)
+        title_y = start_y - 70 + math.sin(tick * 0.05) * 3
+        title = font_title.render("✨ NIVEL UP! ESCOLHA SEU UPGRADE ✨", True, (255, 215, 0))
+        screen.blit(title, (LARGURA//2 - title.get_width()//2, title_y))
 
-            pygame.draw.rect(surf,cor_card,(ccx,cy_c,cw,ch),border_radius=16)
-            pygame.draw.rect(surf,cor_borda,(ccx,cy_c,cw,ch),3,border_radius=16)
+        for i, upgrade in enumerate(options):
+            cx = start_x + i * (card_w + gap)
+            cy = start_y - (10 if i == hover_index else 0)
 
-            # Raridade
-            rar_label=["","⚪ Comum","🔵 Rara","🟣 Épica"][rar]
-            rt=fp.render(rar_label,True,cor_borda)
-            surf.blit(rt,(ccx+cw//2-rt.get_width()//2,cy_c+8))
+            rar = upgrade.get("rar", 1)
+            if rar == 3:
+                bg_color = (80, 40, 100)
+                border_color = (255, 215, 0)
+            elif rar == 2:
+                bg_color = (60, 50, 90)
+                border_color = (100, 150, 255)
+            else:
+                bg_color = (50, 55, 70)
+                border_color = (150, 150, 150)
 
-            # Número
-            nt=ft.render(str(i+1),True,(180,180,180))
-            surf.blit(nt,(ccx+10,cy_c+8))
+            pygame.draw.rect(screen, bg_color, (cx, cy, card_w, card_h), border_radius=12)
+            pygame.draw.rect(screen, border_color, (cx, cy, card_w, card_h), 3, border_radius=12)
 
-            # Ícone
-            ico=ft.render(evo["icone"],True,(255,255,255))
-            surf.blit(ico,(ccx+cw//2-ico.get_width()//2,cy_c+38))
+            icon = font_title.render(upgrade["icone"], True, (255, 255, 255))
+            screen.blit(icon, (cx + card_w//2 - icon.get_width()//2, cy + 25))
 
-            # Nome
-            nmt=fn.render(evo["nome"],True,(255,228,90))
-            surf.blit(nmt,(ccx+cw//2-nmt.get_width()//2,cy_c+110))
+            name = font_name.render(upgrade["nome"], True, border_color)
+            screen.blit(name, (cx + card_w//2 - name.get_width()//2, cy + 80))
 
-            pygame.draw.line(surf,cor_borda,(ccx+12,cy_c+138),(ccx+cw-12,cy_c+138),1)
+            pygame.draw.line(screen, border_color, (cx + 20, cy + 105), (cx + card_w - 20, cy + 105), 1)
 
-            # Descrição
-            dt=fp.render(evo["desc"],True,(195,210,220))
-            surf.blit(dt,(ccx+cw//2-dt.get_width()//2,cy_c+148))
+            desc = font_desc.render(upgrade["desc"], True, (200, 200, 200))
+            screen.blit(desc, (cx + card_w//2 - desc.get_width()//2, cy + 120))
 
-            # Bônus listados
-            yb=cy_c+175
-            for chv,lbl,corf in [("vel","⚡Vel",(220,220,80)),("dano","⚔️Dano",(220,100,80)),
-                                   ("vida","❤️Vida",(220,80,80)),("def","🛡️Def",(80,180,220)),
-                                   ("regen","💚Regen",(80,210,110))]:
-                if chv in evo:
-                    v=evo[chv]
-                    st=f"{lbl} {'x'+str(v) if isinstance(v,float) else '+'+str(v)}"
-                    bt=fp.render(st,True,corf)
-                    surf.blit(bt,(ccx+cw//2-bt.get_width()//2,yb)); yb+=18
+            num_text = font_name.render(str(i+1), True, (100, 100, 120))
+            screen.blit(num_text, (cx + 12, cy + 10))
 
-        pygame.display.flip(); clock.tick(FPS)
-    if sel is not None and sel<len(opcoes): return opcoes[sel]
-    return opcoes[0]
-
-
-# ══════════════════════════════════════════════
-#  FUNDO DO MAPA
-# ══════════════════════════════════════════════
-
-_fundo_surf=None
-
-def criar_fundo():
-    """Gera a superfície de fundo uma única vez (desempenho)."""
-    global _fundo_surf
-    _fundo_surf=pygame.Surface((LARGURA,ALTURA))
-    _fundo_surf.fill(C_FUNDO)
-    rng=random.Random(2024)
-    # Manchas de grama
-    for _ in range(80):
-        mx=rng.randint(0,LARGURA); my=rng.randint(55,ALTURA-55)
-        mr=rng.randint(25,80)
-        s=pygame.Surface((mr*2,mr*2),pygame.SRCALPHA)
-        c=C_GRAMA_A if rng.random()<0.5 else C_GRAMA_B
-        pygame.draw.ellipse(s,(*c,110),(0,0,mr*2,mr*2))
-        _fundo_surf.blit(s,(mx-mr,my-mr))
-    # Pedras
-    for _ in range(30):
-        px=rng.randint(20,LARGURA-20); py=rng.randint(80,ALTURA-80)
-        pr=rng.randint(4,10)
-        pygame.draw.circle(_fundo_surf,(85,78,68),(px,py),pr)
-    # Flores decorativas
-    for _ in range(40):
-        fx=rng.randint(20,LARGURA-20); fy=rng.randint(80,ALTURA-80)
-        for k in range(5):
-            ar=math.radians(k*72)
-            px2=int(fx+math.cos(ar)*5); py2=int(fy+math.sin(ar)*5)
-            cor_f=rng.choice([(220,200,50),(200,80,180),(255,150,50)])
-            pygame.draw.circle(_fundo_surf,cor_f,(px2,py2),3)
-        pygame.draw.circle(_fundo_surf,(255,240,100),(fx,fy),2)
-
-def desenhar_fundo(surf):
-    if _fundo_surf: surf.blit(_fundo_surf,(0,0))
-
-
-# ══════════════════════════════════════════════
-#  HUD
-# ══════════════════════════════════════════════
-
-def desenhar_hud(surf,fn,fp,j,tempo_rest,boss_ativo):
-    # Vida
-    draw_bar(surf,15,12,210,19,j.vida,j.vida_max,C_VIDA,(40,15,15))
-    surf.blit(fp.render(f"❤️ {int(j.vida)}/{j.vida_max}",True,C_TEXTO),(20,14))
-    # XP
-    draw_bar(surf,15,35,210,12,j.xp,j.xp_prox,C_XP,(25,40,25))
-    surf.blit(fp.render(f"XP {j.xp}/{j.xp_prox}",True,C_TEXTO),(20,36))
-    # Nível
-    surf.blit(fn.render(f"Nível {j.nivel}",True,C_OURO),(232,12))
-    # Timer
-    m=int(tempo_rest)//60; s=int(tempo_rest)%60
-    cc=C_AVISO if tempo_rest<30 else C_TEXTO
-    tt=fn.render(f"⏱ {m}:{s:02d}",True,cc)
-    surf.blit(tt,(LARGURA//2-tt.get_width()//2,12))
-    # Dash cooldown
-    if j.tem_dash:
-        dc=max(0,j.dash_cooldown/60)
-        clr=(150,150,150) if dc>0 else (100,220,255)
-        dt=fp.render(f"DASH {'...' if dc>0 else 'PRONTO'} [Shift]",True,clr)
-        surf.blit(dt,(LARGURA//2-dt.get_width()//2,34))
-    # Evoluções (direita)
-    ex=LARGURA-12; ey=12
-    surf.blit(fp.render("Evoluções:",True,(160,160,160)),(ex-fp.size("Evoluções:")[0],ey)); ey+=16
-    for evo in j.evos_ativas[-10:]:
-        rar=evo["rar"]
-        cc2=[(180,180,180),(80,160,220),(180,80,220)][rar-1]
-        te=fp.render(f"{evo['icone']} {evo['nome']}",True,cc2)
-        surf.blit(te,(ex-te.get_width(),ey)); ey+=15
-    # Dica
-    dica="WASD/Setas → mover" + ("  |  Shift → Dash" if j.tem_dash else "")
-    surf.blit(fp.render(dica,True,(100,120,90)),(LARGURA//2-fp.size(dica)[0]//2,ALTURA-16))
-
-
-# ══════════════════════════════════════════════
-#  TELA FIM
-# ══════════════════════════════════════════════
-
-def tela_fim(surf,clock,ft,fn,fp,ganhou,nivel,elapsed,bosses_mortos):
-    tick=0
-    while True:
-        for ev in pygame.event.get():
-            if ev.type==pygame.QUIT: return
-            if ev.type in(pygame.KEYDOWN,pygame.MOUSEBUTTONDOWN): return
-        tick+=1
-        surf.fill((8,5,3) if not ganhou else (12,25,8))
-        msg="🏆 VOCÊ SOBREVIVEU! 🏆" if ganhou else "💀  VOCÊ FOI DEVORADO...  💀"
-        mc=(90,220,90) if ganhou else (220,70,50)
-        draw_shadow(surf,msg,ft,mc,LARGURA//2-ft.size(msg)[0]//2,ALTURA//2-90)
-        for i,(linha,cor3) in enumerate([
-            (f"Nível atingido: {nivel}",(255,220,100)),
-            (f"Tempo: {int(elapsed)}s",(200,200,200)),
-            (f"Bosses derrotados: {bosses_mortos}",(200,100,220)),
-        ]):
-            t=fn.render(linha,True,cor3)
-            surf.blit(t,(LARGURA//2-t.get_width()//2,ALTURA//2+i*36))
-        h=fp.render("[ Qualquer tecla para sair ]",True,(120,120,120))
-        surf.blit(h,(LARGURA//2-h.get_width()//2,ALTURA//2+130))
-        pygame.display.flip(); clock.tick(FPS)
-
-
-# ══════════════════════════════════════════════
-#  MAIN
-# ══════════════════════════════════════════════
-
-def main():
-    global _fonte_peq_global
-    pygame.init()
-    surf=pygame.display.set_mode((LARGURA,ALTURA))
-    pygame.display.set_caption("Everything is Crab 🦀")
-    clock=pygame.time.Clock()
-
-    try:
-        ft=pygame.font.SysFont("segoeuiemoji",27,bold=True)
-        fn=pygame.font.SysFont("segoeuiemoji",20)
-        fp=pygame.font.SysFont("segoeuiemoji",15)
-    except Exception:
-        ft=pygame.font.SysFont(None,29,bold=True)
-        fn=pygame.font.SysFont(None,22)
-        fp=pygame.font.SysFont(None,16)
-    _fonte_peq_global=fp
-
-    criar_fundo()
-
-    # Entidades
-    jogador=Jogador()
-    particulas:list[Particula]=[]
-
-    comidas:list[Comida]=[]
-    for _ in range(22):
-        tipo=random.choices(["fruta","cogumelo"],[70,30])[0]
-        comidas.append(Comida(random.randint(30,LARGURA-30),random.randint(80,ALTURA-80),tipo))
-
-    animais:list[Animal]=[]
-    for _ in range(14):
-        n=random.choices([1,2,3],[60,30,10])[0]
-        animais.append(Animal(random.randint(50,LARGURA-50),random.randint(80,ALTURA-80),n))
-
-    boss:Boss|None=None
-    boss_index=0
-    bosses_mortos=0
-    timer_boss=FPS*60      # primeiro boss após 60s
-    boss_aviso=0           # contagem para mostrar aviso antes do boss
-
-    tick=0
-    inicio=pygame.time.get_ticks()
-    t_comida=0; t_animal=0
-    rodando=True
-
-    while rodando:
-        elapsed=(pygame.time.get_ticks()-inicio)/1000
-        tempo_rest=max(0,DURACAO_RUN-elapsed)
-
-        for ev in pygame.event.get():
-            if ev.type==pygame.QUIT: rodando=False
-            if ev.type==pygame.KEYDOWN:
-                if ev.key==pygame.K_ESCAPE: rodando=False
-
-        teclas=pygame.key.get_pressed()
-        jogador.update(teclas)
-
-        # Atualiza animais
-        for a in animais:
-            a.update(jogador.x,jogador.y,jogador.raio,jogador.mult_percepcao)
-
-        # Atualiza boss
-        if boss and boss.vivo:
-            boss.update(jogador.x,jogador.y)
-
-        # ── Coleta de comida ──────────────────────────────────────────
-        coletadas=[]
-        for c in comidas:
-            if dist(jogador.x,jogador.y,c.x,c.y)<jogador.raio_coleta:
-                subiu=jogador.ganhar_xp(c.xp)
-                for _ in range(8):
-                    cc2=C_FRUTA if c.tipo=="fruta" else C_COGUMELO if c.tipo=="cogumelo" else C_CARNE
-                    particulas.append(Particula(c.x,c.y,cc2,2.5))
-                coletadas.append(c)
-                if subiu:
-                    evo=tela_evolucao(surf,clock,ft,fn,fp)
-                    jogador.aplicar_evo(evo)
-                    for _ in range(25): particulas.append(Particula(jogador.x,jogador.y,C_OURO,4))
-        comidas=[c for c in comidas if c not in coletadas]
-
-        # ── Combate jogador × animais ─────────────────────────────────
-        for a in animais:
-            if not a.vivo: continue
-            d=dist(jogador.x,jogador.y,a.x,a.y)
-            if d<jogador.raio+a.raio-4:
-                if jogador.raio>=a.raio*0.88 and jogador.atacando==0:
-                    dj=int(jogador.dano*jogador.mult_dano)
-                    a.hit(dj); jogador.atacando=18
-                    for _ in range(6): particulas.append(Particula(a.x,a.y,a.cor,3))
-                    if not a.vivo:
-                        comidas.append(Comida(a.x,a.y,"carne"))
-                        subiu=jogador.ganhar_xp(a.xp_drop)
-                        for _ in range(18): particulas.append(Particula(a.x,a.y,a.cor,4))
-                        if subiu:
-                            evo=tela_evolucao(surf,clock,ft,fn,fp)
-                            jogador.aplicar_evo(evo)
-                elif a.raio>jogador.raio*1.08:
-                    jogador.hit(a.nivel*7)
-                    for _ in range(5): particulas.append(Particula(jogador.x,jogador.y,(255,60,60),3))
-                    if jogador.tem_espinhos: a.hit(int(a.nivel*7*0.25))
-
-            # Aura de fogo: dano em área
-            if jogador.tem_aura_fogo and d<jogador.raio+a.raio+30:
-                a.hit(1)   # dano leve contínuo
-
-            # Aura de veneno
-            if jogador.tem_aura_veneno and d<jogador.raio+a.raio+45:
-                a.hit(0.5)
-
-        animais=[a for a in animais if a.vivo]
-
-        # ── Combate jogador × boss ────────────────────────────────────
-        if boss and boss.vivo:
-            db=dist(jogador.x,jogador.y,boss.x,boss.y)
-            if db<jogador.raio+boss.raio-5:
-                if jogador.atacando==0:
-                    dj=int(jogador.dano*jogador.mult_dano*1.2)
-                    boss.hit(dj); jogador.atacando=15
-                    for _ in range(8): particulas.append(Particula(boss.x,boss.y,boss.cor,3.5))
-                jogador.hit(boss.dano_contato)
-                for _ in range(5): particulas.append(Particula(jogador.x,jogador.y,(255,50,50),3))
-
-            # Projéteis do boss
-            for p in boss.projéteis:
-                if dist(jogador.x,jogador.y,p.x,p.y)<jogador.raio+p.raio:
-                    jogador.hit(18); p.vivo=False
-                    for _ in range(6): particulas.append(Particula(jogador.x,jogador.y,(255,100,20),3))
-
-            if not boss.vivo:
-                bosses_mortos+=1
-                for _ in range(40): particulas.append(Particula(boss.x,boss.y,boss.cor,5,60))
-                for _ in range(10): comidas.append(Comida(
-                    boss.x+random.randint(-40,40),
-                    boss.y+random.randint(-40,40),"carne"))
-                evo=tela_evolucao(surf,clock,ft,fn,fp,boss_evo=True)
-                jogador.aplicar_evo(evo)
-                boss=None
-
-        # ── Timer de boss ─────────────────────────────────────────────
-        if boss is None:
-            timer_boss-=1
-            if timer_boss<=FPS*5: boss_aviso=1    # aviso 5s antes
-            if timer_boss<=0:
-                boss=Boss(boss_index); boss_index+=1
-                timer_boss=FPS*60; boss_aviso=0    # próximo boss em 60s
-
-        # ── Spawns periódicos ─────────────────────────────────────────
-        t_comida+=1
-        if t_comida>180 and len(comidas)<28:
-            t_comida=0
-            tipo=random.choices(["fruta","cogumelo"],[72,28])[0]
-            comidas.append(Comida(random.randint(30,LARGURA-30),random.randint(80,ALTURA-80),tipo))
-
-        t_animal+=1
-        intervalo=max(100,280-jogador.nivel*14)
-        if t_animal>intervalo and len(animais)<20:
-            t_animal=0
-            max_n=min(5,1+int(elapsed/25))
-            n=random.randint(1,max_n)
-            lado=random.randint(0,3)
-            if lado==0: ax2,ay2=random.randint(0,LARGURA),60
-            elif lado==1: ax2,ay2=random.randint(0,LARGURA),ALTURA-60
-            elif lado==2: ax2,ay2=20,random.randint(60,ALTURA-60)
-            else: ax2,ay2=LARGURA-20,random.randint(60,ALTURA-60)
-            animais.append(Animal(ax2,ay2,n))
-
-        # Partículas
-        for p in particulas: p.update()
-        particulas=[p for p in particulas if not p.morta]
-
-        # Fim de jogo
-        if not jogador.vivo:
-            tela_fim(surf,clock,ft,fn,fp,False,jogador.nivel,elapsed,bosses_mortos)
-            rodando=False; continue
-        if tempo_rest<=0:
-            tela_fim(surf,clock,ft,fn,fp,True,jogador.nivel,elapsed,bosses_mortos)
-            rodando=False; continue
-
-        # ── DESENHO ───────────────────────────────────────────────────
-        desenhar_fundo(surf)
-
-        for c in comidas: c.draw(surf,tick)
-        for a in animais: a.draw(surf)
-        for p in particulas: p.draw(surf)
-        jogador.draw(surf)
-        if boss and boss.vivo: boss.draw(surf)
-
-        desenhar_hud(surf,fn,fp,jogador,tempo_rest,boss is not None and boss.vivo)
-
-        # Aviso de boss chegando
-        if boss_aviso and (tick//20)%2==0:
-            av=fn.render("⚠️ BOSS CHEGANDO! ⚠️",True,C_AVISO)
-            surf.blit(av,(LARGURA//2-av.get_width()//2,55))
-
-        # Aviso de perigo (animal grande perto)
-        if not boss:
-            for a in animais:
-                if a.raio>jogador.raio*1.2 and dist(jogador.x,jogador.y,a.x,a.y)<170:
-                    if (tick//12)%2==0:
-                        av2=fn.render("⚠️ PERIGO! FUJA!",True,C_AVISO)
-                        surf.blit(av2,(LARGURA//2-av2.get_width()//2,55))
-                    break
+        tip = font_small.render("Pressione 1, 2, 3 ou clique para escolher", True, (120, 120, 120))
+        screen.blit(tip, (LARGURA//2 - tip.get_width()//2, start_y + card_h + 20))
 
         pygame.display.flip()
-        clock.tick(FPS)
-        tick+=1
+        clock.tick(60)
 
-    pygame.quit(); sys.exit()
+    return options[selected]
 
-if __name__=="__main__":
+
+def boss_upgrade_screen(screen, clock):
+    font_title = pygame.font.Font(None, 48)
+    font_name = pygame.font.Font(None, 32)
+    font_desc = pygame.font.Font(None, 24)
+
+    options = random.sample(BOSS_UPGRADES, min(3, len(BOSS_UPGRADES)))
+    selected = None
+    hover_index = -1
+
+    card_w, card_h = 300, 200
+    gap = 40
+    total_w = card_w * 3 + gap * 2
+    start_x = (LARGURA - total_w) // 2
+    start_y = (ALTURA - card_h) // 2
+
+    while selected is None:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    selected = 0
+                elif event.key == pygame.K_2:
+                    selected = 1
+                elif event.key == pygame.K_3:
+                    selected = 2
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mx, my = event.pos
+                for i in range(3):
+                    cx = start_x + i * (card_w + gap)
+                    if cx <= mx <= cx + card_w and start_y <= my <= start_y + card_h:
+                        selected = i
+
+        mx, my = pygame.mouse.get_pos()
+        hover_index = -1
+        for i in range(3):
+            cx = start_x + i * (card_w + gap)
+            if cx <= mx <= cx + card_w and start_y <= my <= start_y + card_h:
+                hover_index = i
+
+        overlay = pygame.Surface((LARGURA, ALTURA))
+        overlay.set_alpha(200)
+        overlay.fill((0, 0, 0))
+        screen.blit(overlay, (0, 0))
+
+        title = font_title.render("✨ UPGRADE ÉPICO DO BOSS! ✨", True, (255, 215, 0))
+        screen.blit(title, (LARGURA//2 - title.get_width()//2, start_y - 60))
+
+        for i, upgrade in enumerate(options):
+            cx = start_x + i * (card_w + gap)
+            cy = start_y - (10 if i == hover_index else 0)
+
+            pygame.draw.rect(screen, (40, 30, 60), (cx, cy, card_w, card_h), border_radius=12)
+            pygame.draw.rect(screen, (255, 215, 0), (cx, cy, card_w, card_h), 3, border_radius=12)
+
+            icon = font_title.render(upgrade["nome"][0], True, (255, 215, 0))
+            screen.blit(icon, (cx + 20, cy + 20))
+
+            name = font_name.render(upgrade["nome"], True, (255, 215, 0))
+            screen.blit(name, (cx + card_w//2 - name.get_width()//2, cy + 30))
+
+            desc = font_desc.render(upgrade["desc"], True, (200, 200, 200))
+            screen.blit(desc, (cx + card_w//2 - desc.get_width()//2, cy + 80))
+
+            num = font_title.render(str(i+1), True, (100, 100, 100))
+            screen.blit(num, (cx + card_w - 30, cy + 10))
+
+        pygame.display.flip()
+        clock.tick(60)
+
+    return options[selected]
+
+
+def shop_screen(screen, clock, player):
+    font_title = pygame.font.Font(None, 48)
+    font_name = pygame.font.Font(None, 32)
+    font_small = pygame.font.Font(None, 16)
+
+    upgrades = [
+        {"nome": "❤️ Vida +20", "desc": "Aumenta vida máxima", "custo": 100, "level": 0, "max": 5,
+         "efeito": lambda p: setattr(p, 'max_health', p.max_health + 20) or setattr(p, 'health', p.health + 20)},
+        {"nome": "⚔️ Dano +10%", "desc": "Aumenta dano", "custo": 150, "level": 0, "max": 5,
+         "efeito": lambda p: setattr(p, 'damage', int(p.damage * 1.1))},
+        {"nome": "🏃 Velocidade +10%", "desc": "Aumenta velocidade", "custo": 120, "level": 0, "max": 5,
+         "efeito": lambda p: setattr(p, 'speed', p.speed * 1.1) or setattr(p, 'base_speed', p.base_speed * 1.1)},
+        {"nome": "💰 Moedas +20%", "desc": "Aumenta ganho de moedas", "custo": 180, "level": 0, "max": 3,
+         "efeito": lambda p: setattr(p, 'coin_mult', p.coin_mult * 1.2)},
+    ]
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mx, my = event.pos
+                for i, up in enumerate(upgrades):
+                    x = 100 + (i % 2) * 350
+                    y = 200 + (i // 2) * 120
+                    if x <= mx <= x + 300 and y <= my <= y + 80:
+                        if up["level"] < up["max"] and player.coins >= up["custo"]:
+                            player.coins -= up["custo"]
+                            up["level"] += 1
+                            up["efeito"](player)
+                            up["custo"] = int(up["custo"] * 1.5)
+
+        overlay = pygame.Surface((LARGURA, ALTURA))
+        overlay.set_alpha(200)
+        overlay.fill((0, 0, 0))
+        screen.blit(overlay, (0, 0))
+
+        title = font_title.render("🛒 LOJA DE UPGRADES PERMANENTES", True, (255, 215, 0))
+        screen.blit(title, (LARGURA//2 - title.get_width()//2, 50))
+
+        coins_text = font_name.render(f"💰 MOEDAS: {player.coins}", True, (255, 215, 0))
+        screen.blit(coins_text, (LARGURA//2 - coins_text.get_width()//2, 120))
+
+        for i, up in enumerate(upgrades):
+            x = 150 + (i % 2) * 400
+            y = 200 + (i // 2) * 100
+
+            can_buy = up["level"] < up["max"] and player.coins >= up["custo"]
+            bg_color = (50, 70, 90) if can_buy else (40, 40, 50)
+            border_color = (255, 215, 0) if can_buy else (100, 100, 100)
+
+            pygame.draw.rect(screen, bg_color, (x, y, 380, 80), border_radius=10)
+            pygame.draw.rect(screen, border_color, (x, y, 380, 80), 2, border_radius=10)
+
+            name = font_name.render(up["nome"], True, (255, 215, 0))
+            screen.blit(name, (x + 15, y + 10))
+
+            desc = font_small.render(up["desc"], True, (200, 200, 200))
+            screen.blit(desc, (x + 15, y + 40))
+
+            level_text = font_small.render(f"Nv:{up['level']}/{up['max']}", True, (150, 150, 150))
+            screen.blit(level_text, (x + 300, y + 15))
+
+            cost_text = font_small.render(f"{up['custo']}💰", True, (255, 215, 0) if can_buy else (150, 100, 100))
+            screen.blit(cost_text, (x + 300, y + 45))
+
+        tip = font_small.render("Clique nos upgrades para comprar | ESC para sair", True, (120, 120, 120))
+        screen.blit(tip, (LARGURA//2 - tip.get_width()//2, ALTURA - 40))
+
+        pygame.display.flip()
+        clock.tick(60)
+
+
+def stats_screen(screen, clock, player):
+    font_title = pygame.font.Font(None, 48)
+    font_name = pygame.font.Font(None, 28)
+    font_small = pygame.font.Font(None, 20)
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return
+
+        overlay = pygame.Surface((LARGURA, ALTURA))
+        overlay.set_alpha(200)
+        overlay.fill((0, 0, 0))
+        screen.blit(overlay, (0, 0))
+
+        title = font_title.render("📊 ESTATÍSTICAS DA PARTIDA", True, (255, 215, 0))
+        screen.blit(title, (LARGURA//2 - title.get_width()//2, 50))
+
+        y = 150
+        stats = [
+            f"🎯 Nível: {player.level}",
+            f"💀 Inimigos mortos: {player.stats['kills']}",
+            f"👑 Bosses mortos: {player.stats['boss_kills']}",
+            f"💰 Moedas: {player.coins}",
+            f"✨ Maior Combo: {player.max_combo}",
+            f"💪 Upgrades de nível: {len(player.level_upgrades)}",
+            f"👑 Upgrades de boss: {len(player.boss_upgrades)}",
+        ]
+
+        for stat in stats:
+            text = font_name.render(stat, True, (200, 200, 200))
+            screen.blit(text, (LARGURA//2 - text.get_width()//2, y))
+            y += 40
+
+        tip = font_small.render("Pressione ESC para voltar", True, (120, 120, 120))
+        screen.blit(tip, (LARGURA//2 - tip.get_width()//2, ALTURA - 50))
+
+        pygame.display.flip()
+        clock.tick(60)
+
+
+def draw_minimap(surf, player, enemies, meat_drops):
+    minimap_size = 150
+    minimap_x = LARGURA - minimap_size - 10
+    minimap_y = ALTURA - minimap_size - 10
+
+    minimap_surf = pygame.Surface((minimap_size, minimap_size))
+    minimap_surf.set_alpha(200)
+    minimap_surf.fill((20, 20, 30))
+    pygame.draw.rect(minimap_surf, (255, 215, 0), (0, 0, minimap_size, minimap_size), 2)
+
+    def world_to_minimap(x, y):
+        return int((x / LARGURA) * minimap_size), int((y / ALTURA) * minimap_size)
+
+    for meat in meat_drops:
+        mx, my = world_to_minimap(meat.x, meat.y)
+        pygame.draw.circle(minimap_surf, (255, 215, 0), (mx, my), 2)
+
+    for enemy in enemies:
+        mx, my = world_to_minimap(enemy.x, enemy.y)
+        if hasattr(enemy, 'is_boss') and enemy.is_boss:
+            pygame.draw.circle(minimap_surf, (255, 50, 50), (mx, my), 5)
+        else:
+            pygame.draw.circle(minimap_surf, (255, 80, 80), (mx, my), 2)
+
+    mx, my = world_to_minimap(player.x, player.y)
+    pygame.draw.circle(minimap_surf, (70, 150, 230), (mx, my), 4)
+    pygame.draw.circle(minimap_surf, (255, 215, 0), (mx, my), 4, 1)
+
+    surf.blit(minimap_surf, (minimap_x, minimap_y))
+
+
+# ═══════════════════════════════════════════════════════════════════
+# FUNÇÃO PRINCIPAL
+# ═══════════════════════════════════════════════════════════════════
+
+def main():
+    pygame.init()
+    screen = pygame.display.set_mode((LARGURA, ALTURA))
+    pygame.display.set_caption("Everything is Crab - Simplified Edition 🦀")
+    clock = pygame.time.Clock()
+    pygame.mouse.set_visible(True)
+
+    player = Player()
+    enemies = []
+    meat_drops = []
+    particles = []
+    lightning_effects = []
+    parry_effects = []
+    enemy_bullets = []
+
+    wave = 1
+    enemies_to_spawn = 10
+    boss_spawned = False
+
+    # Spawn inicial
+    for _ in range(enemies_to_spawn):
+        x = random.randint(50, LARGURA - 50)
+        y = random.randint(80, ALTURA - 80)
+        size = random.randint(15, 30)
+        enemies.append(Enemy(x, y, size))
+
+    # Fundo
+    background = pygame.Surface((LARGURA, ALTURA))
+    for y in range(ALTURA):
+        t = y / ALTURA
+        color = (int(15 * (1 - t) + 10 * t),
+                 int(20 * (1 - t) + 12 * t),
+                 int(25 * (1 - t) + 18 * t))
+        pygame.draw.line(background, color, (0, y), (LARGURA, y))
+
+    stars = [(random.randint(0, LARGURA), random.randint(0, ALTURA//2), random.randint(100, 255)) for _ in range(100)]
+
+    fonts = {
+        'large': pygame.font.Font(None, 48),
+        'medium': pygame.font.Font(None, 32),
+        'small': pygame.font.Font(None, 20),
+        'tiny': pygame.font.Font(None, 14)
+    }
+
+    running = True
+    start_time = pygame.time.get_ticks()
+    tick = 0
+    show_shop = False
+    show_stats = False
+
+    while running:
+        delta = clock.tick(FPS)
+        current_time = (pygame.time.get_ticks() - start_time) / 1000
+        tick += 1
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                if event.key == pygame.K_TAB:
+                    show_shop = not show_shop
+                if event.key == pygame.K_q:
+                    show_stats = not show_stats
+
+        if show_shop:
+            shop_screen(screen, clock, player)
+            show_shop = False
+            continue
+
+        if show_stats:
+            stats_screen(screen, clock, player)
+            show_stats = False
+            continue
+
+        keys = pygame.key.get_pressed()
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_buttons = pygame.mouse.get_pressed()
+
+        player.update(keys, mouse_pos, mouse_buttons)
+
+        # Atualizar inimigos
+        for enemy in enemies[:]:
+            enemy.update(player.x, player.y)
+
+            if player.rect.colliderect(enemy.rect):
+                player.take_damage(enemy.damage)
+
+            for bullet in player.bullets[:]:
+                if bullet.rect.colliderect(enemy.rect):
+                    has_freeze = player.has_freeze
+                    if enemy.take_damage(bullet.damage, has_freeze):
+                        player.stats["kills"] += 1
+                        player.stats["damage_dealt"] += bullet.damage
+                        player.add_combo()
+
+                        meat_drops.append(MeatDrop(enemy.x, enemy.y, enemy.xp_value, enemy.coin_value))
+
+                        for _ in range(15):
+                            angle = random.uniform(0, math.pi * 2)
+                            speed = random.uniform(2, 5)
+                            vx = math.cos(angle) * speed
+                            vy = math.sin(angle) * speed
+                            particles.append(Particle(enemy.x, enemy.y, enemy.color, (vx, vy)))
+
+                        enemies.remove(enemy)
+
+                        if player.vampirism:
+                            player.heal(bullet.damage // 4)
+
+                        if player.has_chain:
+                            closest = None
+                            min_dist = 150
+                            for other in enemies:
+                                dist = math.hypot(other.x - enemy.x, other.y - enemy.y)
+                                if 0 < dist < min_dist:
+                                    min_dist = dist
+                                    closest = other
+                            if closest:
+                                closest.take_damage(bullet.damage // 2, has_freeze)
+                                lightning_effects.append(LightningEffect(enemy.x, enemy.y, closest.x, closest.y))
+                    else:
+                        if player.ricochet:
+                            if bullet.x < 0 or bullet.x > LARGURA or bullet.y < 0 or bullet.y > ALTURA:
+                                bullet.angle = math.atan2(-math.sin(bullet.angle), -math.cos(bullet.angle))
+
+                    if not player.pierce:
+                        player.bullets.remove(bullet)
+                        break
+
+        # Parry
+        if player.parry_timer > 0:
+            parry_effects.append(ParryEffect(player.x, player.y))
+            for bullet in enemy_bullets[:]:
+                if math.hypot(bullet.x - player.x, bullet.y - player.y) < player.size + 20:
+                    angle = math.atan2(bullet.y - player.y, bullet.x - player.x)
+                    player.bullets.append(Bullet(player.x, player.y, angle, bullet.damage * 2, speed=15, size=8, color=(80, 200, 255)))
+                    enemy_bullets.remove(bullet)
+
+        for bullet in enemy_bullets[:]:
+            bullet.update()
+            if bullet.rect.colliderect(player.rect):
+                player.take_damage(bullet.damage)
+                enemy_bullets.remove(bullet)
+            elif not bullet.is_alive:
+                enemy_bullets.remove(bullet)
+
+        for bullet in player.bullets[:]:
+            bullet.update()
+            if not bullet.is_alive:
+                player.bullets.remove(bullet)
+
+        for p in particles[:]:
+            p.update()
+            if not p.is_alive:
+                particles.remove(p)
+
+        for l in lightning_effects[:]:
+            l.update()
+            if not l.is_alive:
+                lightning_effects.remove(l)
+
+        for p in parry_effects[:]:
+            p.update()
+            if not p.is_alive:
+                parry_effects.remove(p)
+
+        for meat in meat_drops[:]:
+            meat.update()
+            if player.rect.colliderect(meat.rect):
+                if player.gain_xp(meat.xp_value):
+                    upgrade = level_upgrade_screen(screen, clock)
+                    player.apply_level_upgrade(upgrade)
+                player.gain_coins(meat.coin_value)
+                meat_drops.remove(meat)
+            elif not meat.is_alive:
+                meat_drops.remove(meat)
+
+        # Waves
+        if len(enemies) == 0 and not boss_spawned:
+            if wave % 10 == 0:
+                boss_spawned = True
+                x = random.randint(100, LARGURA - 100)
+                y = random.randint(100, ALTURA - 100)
+                enemies.append(Boss(x, y, wave))
+            else:
+                wave += 1
+                enemies_to_spawn = min(25, 10 + wave // 3)
+                for _ in range(enemies_to_spawn):
+                    x = random.randint(50, LARGURA - 50)
+                    y = random.randint(80, ALTURA - 80)
+                    size = random.randint(15, 25 + wave // 10)
+                    enemies.append(Enemy(x, y, size))
+
+        if boss_spawned and len([e for e in enemies if hasattr(e, 'is_boss') and e.is_boss]) == 0:
+            upgrade = boss_upgrade_screen(screen, clock)
+            player.add_boss_upgrade(upgrade)
+            player.stats["boss_kills"] += 1
+            boss_spawned = False
+            wave += 1
+            meat_drops.append(MeatDrop(player.x, player.y, 200, 150))
+
+        # Game over
+        if not player.alive or current_time >= DURACAO_RUN:
+            screen.fill((0, 0, 0))
+            if current_time >= DURACAO_RUN:
+                text = fonts['large'].render("🏆 VICTORY! 🏆", True, (255, 215, 0))
+            else:
+                text = fonts['large'].render("💀 GAME OVER 💀", True, (255, 80, 80))
+            screen.blit(text, (LARGURA//2 - text.get_width()//2, ALTURA//2 - 150))
+
+            y_offset = ALTURA//2 - 50
+            stats_lines = [
+                f"Wave: {wave} | Nível: {player.level}",
+                f"💀 Inimigos: {player.stats['kills']} | 👑 Bosses: {player.stats['boss_kills']}",
+                f"💰 Moedas: {player.coins} | ✨ Combo max: {player.max_combo}",
+            ]
+
+            for line in stats_lines:
+                text = fonts['medium'].render(line, True, (255, 215, 0))
+                screen.blit(text, (LARGURA//2 - text.get_width()//2, y_offset))
+                y_offset += 40
+
+            text = fonts['tiny'].render("ESC para sair | TAB para loja", True, (150, 150, 150))
+            screen.blit(text, (LARGURA//2 - text.get_width()//2, ALTURA - 50))
+
+            pygame.display.flip()
+
+            waiting = True
+            while waiting:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        waiting = False
+                        running = False
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            waiting = False
+                            running = False
+                        if event.key == pygame.K_TAB:
+                            shop_screen(screen, clock, player)
+                clock.tick(30)
+            continue
+
+        # Desenhar
+        screen.blit(background, (0, 0))
+
+        for sx, sy, brightness in stars:
+            pygame.draw.circle(screen, (brightness, brightness, brightness), (sx, sy), 1)
+
+        for meat in meat_drops:
+            meat.draw(screen, tick)
+
+        for enemy in enemies:
+            enemy.draw(screen)
+
+        for bullet in enemy_bullets:
+            bullet.draw(screen)
+
+        for bullet in player.bullets:
+            bullet.draw(screen)
+
+        for p in particles:
+            p.draw(screen)
+
+        for l in lightning_effects:
+            l.draw(screen)
+
+        for p in parry_effects:
+            p.draw(screen)
+
+        player.draw(screen)
+
+        draw_minimap(screen, player, enemies, meat_drops)
+
+        # HUD
+        time_left = max(0, DURACAO_RUN - current_time)
+        minutes = int(time_left) // 60
+        seconds = int(time_left) % 60
+        timer_text = fonts['medium'].render(f"⏱ {minutes:02d}:{seconds:02d}", True, (255, 215, 0))
+        screen.blit(timer_text, (LARGURA - timer_text.get_width() - 10, 10))
+
+        wave_text = fonts['medium'].render(f"🌊 Wave {wave}", True, (100, 255, 100))
+        screen.blit(wave_text, (10, 10))
+
+        coins_text = fonts['small'].render(f"💰 {player.coins}", True, (255, 215, 0))
+        screen.blit(coins_text, (10, 45))
+
+        combo_text = fonts['small'].render(f"✨ Combo x{player.combo}", True, (100, 255, 100) if player.combo > 0 else (100, 100, 100))
+        screen.blit(combo_text, (10, 65))
+
+        enemies_left = len(enemies)
+        enemy_text = fonts['small'].render(f"👾 Inimigos: {enemies_left}", True, (150, 150, 150))
+        screen.blit(enemy_text, (10, 85))
+
+        parry_text = fonts['tiny'].render("PARRY", True, (80, 200, 255) if player.parry_cooldown == 0 else (100, 100, 100))
+        screen.blit(parry_text, (10, 110))
+
+        tip = "WASD → Mover | Mouse → Mirar | Clique Esquerdo → Atirar | Clique Direito → PARRY | Shift → Dash"
+        tip_text = fonts['tiny'].render(tip, True, (100, 100, 100))
+        screen.blit(tip_text, (LARGURA//2 - tip_text.get_width()//2, ALTURA - 15))
+
+        mx, my = mouse_pos
+        pygame.draw.circle(screen, (255, 255, 255), (mx, my), 8, 2)
+        pygame.draw.line(screen, (255, 255, 255), (mx - 15, my), (mx - 5, my), 2)
+        pygame.draw.line(screen, (255, 255, 255), (mx + 5, my), (mx + 15, my), 2)
+        pygame.draw.line(screen, (255, 255, 255), (mx, my - 15), (mx, my - 5), 2)
+        pygame.draw.line(screen, (255, 255, 255), (mx, my + 5), (mx, my + 15), 2)
+
+        pygame.display.flip()
+
+    pygame.quit()
+    sys.exit()
+
+
+if __name__ == "__main__":
     main()
